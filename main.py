@@ -1,11 +1,5 @@
 from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    MessageHandler,
-    filters,
-    ContextTypes,
-    CommandHandler
-)
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
 from telegram.request import HTTPXRequest
 from dotenv import load_dotenv
 from datetime import datetime
@@ -19,6 +13,7 @@ admin_id = int(os.getenv("ADMIN_ID")) if os.getenv("ADMIN_ID") else None
 
 
 # Function to send error messages to the admin
+# Kept in in case I need it in the future ¯\_(ツ)_/¯
 async def send_error_message(context: ContextTypes.DEFAULT_TYPE, matches, error_msg=""):
     # error_message = (
     #     "The following links could not be processed:\n"
@@ -29,16 +24,38 @@ async def send_error_message(context: ContextTypes.DEFAULT_TYPE, matches, error_
     # await context.bot.send_message(chat_id=admin_id, text=error_message)
     pass
 
+
 async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Pong!")
+
+
+async def create_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("create_event")
+
+
+async def view_events(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("view_events")
+
+
+async def edit_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("edit_event")
+
+
+async def delete_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("delete_event")
+
+
+async def rollcall(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("rollcall")
+
 
 async def on_startup(app):
     if admin_id:
         start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         await app.bot.send_message(
-            chat_id=admin_id,
-            text=f"Bot started successfully at {start_time}"
+            chat_id=admin_id, text=f"Bot started successfully at {start_time}"
         )
+
 
 if __name__ == "__main__":
     # Bot setup and start polling
@@ -50,12 +67,19 @@ if __name__ == "__main__":
         media_write_timeout=60.0,
     )
 
-    app = (ApplicationBuilder()
-           .token(api_key)
-           .request(request)
-           .post_init(on_startup)
-           .build())
+    app = (
+        ApplicationBuilder()
+        .token(api_key)
+        .request(request)
+        .post_init(on_startup)
+        .build()
+    )
 
     app.add_handler(CommandHandler("ping", ping))
+    app.add_handler(CommandHandler("create", create_event))
+    app.add_handler(CommandHandler("view", view_events))
+    app.add_handler(CommandHandler("edit", edit_event))
+    app.add_handler(CommandHandler("delete", delete_event))
+    app.add_handler(CommandHandler("rollcall", rollcall))
 
     app.run_polling()
