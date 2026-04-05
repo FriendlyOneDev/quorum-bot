@@ -84,15 +84,27 @@ async def giveslot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @ensure_user
 @require_gm
 async def giveslots(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args or []
+    amount = 1
+    if args:
+        try:
+            amount = int(args[0])
+            if amount < 1:
+                raise ValueError
+        except ValueError:
+            await update.message.reply_text("Кількість має бути додатнім числом.")
+            return
+
     users = data_utils.get_all_users()
     count = 0
     for user in users:
         if user["role"] == "user":
-            data_utils.add_slots(user["user_id"], 1)
+            data_utils.add_slots(user["user_id"], amount)
             count += 1
 
+    word = _slot_word(amount)
     await update.message.reply_text(
-        f"Видано по 1 слоту {count} гравцям."
+        f"Видано по {amount} {word} {count} гравцям."
     )
 
 
