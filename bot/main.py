@@ -177,5 +177,6 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(join_game, pattern=r"^join:"))
     app.add_handler(CallbackQueryHandler(leave_game, pattern=r"^leave:"))
     app.add_handler(CallbackQueryHandler(register_callback, pattern=r"^register_me$"))
+    app.add_handler(CallbackQueryHandler(cancel, pattern=r"^cancel$"))
 
     app.run_polling()

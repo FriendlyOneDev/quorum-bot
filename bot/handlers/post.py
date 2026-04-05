@@ -34,8 +34,13 @@ async def post_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @ensure_user
 async def post_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    user_id = update.effective_user.id
 
+    if not data_utils.has_gm_permission(user_id):
+        await query.answer("Ця дія доступна лише для GM.", show_alert=True)
+        return
+
+    await query.answer()
     game_id = query.data.split(":", 1)[1]
     game = data_utils.get_game(game_id)
     if not game:
@@ -57,7 +62,7 @@ async def post_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text, parse_mode="HTML", reply_markup=keyboard,
         )
     data_utils.update_game(game_id, {"message_id": sent.message_id})
-    await query.edit_message_text("Гру опубліковано!")
+    await query.message.delete()
 
 
 # ---------------------------------------------------------------------------
@@ -168,8 +173,13 @@ async def rollcall_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @ensure_user
 async def rollcall_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    user_id = update.effective_user.id
 
+    if not data_utils.has_gm_permission(user_id):
+        await query.answer("Ця дія доступна лише для GM.", show_alert=True)
+        return
+
+    await query.answer()
     game_id = query.data.split(":", 1)[1]
     game = data_utils.get_game(game_id)
 
