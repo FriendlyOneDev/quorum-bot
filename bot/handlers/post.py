@@ -69,6 +69,39 @@ async def post_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Join / Leave callbacks
 # ---------------------------------------------------------------------------
 
+async def _notify_creator(context, game, user, action, chat_id):
+    """Send a DM to the game creator about a join/leave action."""
+    creator_id = game.get("creator_id")
+    if not creator_id:
+        return
+
+    user_mention = f'<a href="tg://user?id={user.id}">@{user.username or user.full_name}</a>'
+    players = game.get("players", [])
+    max_players = game["max_players"]
+
+    title = game["title"]
+    msg_id = game.get("message_id")
+    if msg_id and chat_id and str(chat_id).startswith("-100"):
+        # Message links only work in supergroups (-100XXXXXXXXXX)
+        link_chat_id = str(chat_id)[4:]
+        title_link = f'<a href="https://t.me/c/{link_chat_id}/{msg_id}">{title}</a>'
+    else:
+        title_link = f"<b>{title}</b>"
+
+    text = (
+        f"{user_mention} {action} {title_link}\n"
+        f"<b>Поточна заповненість:</b> {len(players)}/{max_players}"
+    )
+
+    try:
+        await context.bot.send_message(
+            chat_id=creator_id, text=text, parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+    except Exception:
+        pass
+
+
 async def _update_posted_message(query, game, game_id):
     text = format_game(game)
     keyboard = join_leave_keyboard(game_id)
@@ -107,7 +140,7 @@ async def join_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         slots = data_utils.get_slots(player_id)
         if slots <= 0:
             await query.answer(
-                "У вас немає слотів для запису. Попросіть GM дати вам слот!",
+                "У вас немає слотів для запису.",
                 show_alert=True,
             )
             return
@@ -117,6 +150,7 @@ async def join_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game = data_utils.get_game(game_id)
     await query.answer("Ви записались!")
     await _update_posted_message(query, game, game_id)
+    await _notify_creator(context, game, update.effective_user, "записався на", query.message.chat_id)
 
 
 @ensure_user
@@ -144,6 +178,7 @@ async def leave_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game = data_utils.get_game(game_id)
     await query.answer("Ви відписались.")
     await _update_posted_message(query, game, game_id)
+    await _notify_creator(context, game, update.effective_user, "відписався від", query.message.chat_id)
 
 
 # ---------------------------------------------------------------------------
@@ -195,10 +230,15 @@ async def rollcall_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    mentions = " ".join(
-        f'<a href="tg://user?id={pid}">гравець</a>' for pid in players
-    )
-    await query.edit_message_text(
+    mention_parts = []
+    for pid in players:
+        user = data_utils.get_user(pid)
+        name = (user.get("display_name") or user.get("username") or str(pid)) if user else str(pid)
+        mention_parts.append(f'<a href="tg://user?id={pid}">{name}</a>')
+    mentions = " ".join(mention_parts)
+
+    await query.message.delete()
+    await query.message.chat.send_message(
         f"Перекличка для <b>{game['title']}</b>:\n\n{mentions}",
         parse_mode="HTML",
     )
