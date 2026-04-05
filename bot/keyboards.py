@@ -2,25 +2,25 @@ from datetime import date, timedelta
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"]
 
 
-def event_list_keyboard(events, prefix):
-    """Build a keyboard listing events. callback_data = {prefix}:{event_id}"""
+def game_list_keyboard(games, prefix):
+    """Build a keyboard listing games. callback_data = {prefix}:{game_id}"""
     buttons = [
-        [InlineKeyboardButton(e["title"], callback_data=f"{prefix}:{e['event_id']}")]
-        for e in events
+        [InlineKeyboardButton(g["title"], callback_data=f"{prefix}:{g['game_id']}")]
+        for g in games
     ]
-    buttons.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
+    buttons.append([InlineKeyboardButton("Скасувати", callback_data="cancel")])
     return InlineKeyboardMarkup(buttons)
 
 
-def join_leave_keyboard(event_id):
-    """Join/Leave buttons for a posted event message."""
+def join_leave_keyboard(game_id):
+    """Join/Leave buttons for a posted game message."""
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("Join", callback_data=f"join:{event_id}"),
-            InlineKeyboardButton("Leave", callback_data=f"leave:{event_id}"),
+            InlineKeyboardButton("Записатись", callback_data=f"join:{game_id}"),
+            InlineKeyboardButton("Відписатись", callback_data=f"leave:{game_id}"),
         ]
     ])
 
@@ -28,16 +28,16 @@ def join_leave_keyboard(event_id):
 def edit_field_keyboard():
     """Field selection keyboard for /edit."""
     fields = [
-        ("Title", "title"),
-        ("Description", "description"),
-        ("Max Players", "max_players"),
-        ("Date", "event_date"),
+        ("Назва", "title"),
+        ("Опис", "description"),
+        ("Макс. гравців", "max_players"),
+        ("Дата", "game_date"),
     ]
     buttons = [
         [InlineKeyboardButton(label, callback_data=f"edit_field:{field}")]
         for label, field in fields
     ]
-    buttons.append([InlineKeyboardButton("Cancel", callback_data="cancel")])
+    buttons.append([InlineKeyboardButton("Скасувати", callback_data="cancel")])
     return InlineKeyboardMarkup(buttons)
 
 
@@ -54,7 +54,7 @@ def date_picker_keyboard(prefix="cal"):
                 InlineKeyboardButton(label, callback_data=f"{prefix}:{d.isoformat()}")
             )
         buttons.append(row)
-    buttons.append([InlineKeyboardButton("Skip", callback_data=f"{prefix}:skip")])
+    buttons.append([InlineKeyboardButton("Пропустити", callback_data=f"{prefix}:skip")])
     return InlineKeyboardMarkup(buttons)
 
 
@@ -69,15 +69,15 @@ def time_picker_keyboard(prefix="time"):
         ]
         for i in range(0, len(hours), 2)
     ]
-    buttons.append([InlineKeyboardButton("Skip", callback_data=f"{prefix}:skip")])
+    buttons.append([InlineKeyboardButton("Пропустити", callback_data=f"{prefix}:skip")])
     return InlineKeyboardMarkup(buttons)
 
 
-def confirm_delete_keyboard(event_id):
+def confirm_delete_keyboard(game_id):
     """Yes/No confirmation for deletion."""
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("Yes, delete", callback_data=f"del_yes:{event_id}"),
-            InlineKeyboardButton("No, cancel", callback_data="del_no"),
+            InlineKeyboardButton("Так, видалити", callback_data=f"del_yes:{game_id}"),
+            InlineKeyboardButton("Ні, скасувати", callback_data="del_no"),
         ]
     ])
