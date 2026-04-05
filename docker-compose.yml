@@ -1,6 +1,6 @@
 services:
   bot:
-    build: .
+    image: friendlyone/quorum-bot:latest
     container_name: quorum-bot
     restart: unless-stopped
     env_file:
