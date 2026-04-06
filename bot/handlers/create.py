@@ -27,7 +27,7 @@ async def create_title(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @ensure_user
 async def create_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["create_desc"] = update.message.text
+    context.user_data["create_desc"] = update.message.text_html
     await update.message.reply_text("Введіть максимальну кількість гравців:")
     return CREATE_MAX
 
