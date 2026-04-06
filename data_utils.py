@@ -367,9 +367,11 @@ def add_slots(user_id: int, count: int = 1) -> bool:
         return False
     current_week = _current_week()
     if user.get("slots_week") != current_week:
-        update_user(user_id, {"slots": count, "slots_week": current_week})
+        new_slots = max(0, count)
+        update_user(user_id, {"slots": new_slots, "slots_week": current_week})
     else:
-        update_user(user_id, {"slots": user.get("slots", 0) + count})
+        new_slots = max(0, user.get("slots", 0) + count)
+        update_user(user_id, {"slots": new_slots})
     return True
 
 

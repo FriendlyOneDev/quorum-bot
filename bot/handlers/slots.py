@@ -29,10 +29,10 @@ async def giveslot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if args:
             try:
                 count = int(args[0])
-                if count < 1:
+                if count == 0:
                     raise ValueError
             except ValueError:
-                await update.message.reply_text("Кількість має бути додатнім числом.")
+                await update.message.reply_text("Кількість має бути ненульовим числом.")
                 return
     # Method 2: @username in private/group
     elif args:
@@ -54,10 +54,10 @@ async def giveslot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(args) > 1:
             try:
                 count = int(args[1])
-                if count < 1:
+                if count == 0:
                     raise ValueError
             except ValueError:
-                await update.message.reply_text("Кількість має бути додатнім числом.")
+                await update.message.reply_text("Кількість має бути ненульовим числом.")
                 return
     else:
         await update.message.reply_text(
@@ -89,10 +89,10 @@ async def giveslots(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if args:
         try:
             amount = int(args[0])
-            if amount < 1:
+            if amount == 0:
                 raise ValueError
         except ValueError:
-            await update.message.reply_text("Кількість має бути додатнім числом.")
+            await update.message.reply_text("Кількість має бути ненульовим числом.")
             return
 
     users = data_utils.get_all_users()
