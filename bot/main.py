@@ -20,9 +20,9 @@ from bot.handlers import (
     cancel,
     help_cmd,
     # /create
-    create_start, create_title, create_desc, create_max,
+    create_start, create_title, create_desc, create_max, create_location,
     create_date, create_time, create_image,
-    CREATE_TITLE, CREATE_DESC, CREATE_MAX, CREATE_DATE, CREATE_TIME, CREATE_IMAGE,
+    CREATE_TITLE, CREATE_DESC, CREATE_MAX, CREATE_LOCATION, CREATE_DATE, CREATE_TIME, CREATE_IMAGE,
     # /view
     view_games,
     # /edit
@@ -111,6 +111,7 @@ if __name__ == "__main__":
             CREATE_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_title)],
             CREATE_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_desc)],
             CREATE_MAX: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_max)],
+            CREATE_LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_location)],
             CREATE_DATE: [CallbackQueryHandler(create_date, pattern=r"^cal:")],
             CREATE_TIME: [CallbackQueryHandler(create_time, pattern=r"^time:")],
             CREATE_IMAGE: [

@@ -11,7 +11,7 @@ TIMEZONE = ZoneInfo(os.getenv("TIMEZONE", "Europe/Kyiv"))
 # Column lists for consistent dict assembly
 _GAME_COLS = (
     "game_id", "creator_id", "title", "description", "max_players",
-    "created_at", "game_date", "message_id", "photo_id", "autodelete",
+    "created_at", "game_date", "location", "message_id", "photo_id", "autodelete",
 )
 _USER_COLS = ("user_id", "username", "display_name", "role", "slots", "slots_week")
 
@@ -46,7 +46,8 @@ def _row_to_user(row) -> Dict:
 # ---------------------------------------------------------------------------
 
 def create_game(creator_id: int, title: str, description: str, max_players: int,
-                game_date: str = None, message_id: int = None, autodelete: bool = True) -> Dict:
+                game_date: str = None, location: str = None,
+                message_id: int = None, autodelete: bool = True) -> Dict:
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute("SELECT nextval('game_id_seq')")
@@ -56,10 +57,10 @@ def create_game(creator_id: int, title: str, description: str, max_players: int,
 
         cur.execute(
             """INSERT INTO games (game_id, creator_id, title, description, max_players,
-                                  created_at, game_date, message_id, photo_id, autodelete)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NULL, %s)""",
+                                  created_at, game_date, location, message_id, photo_id, autodelete)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s)""",
             (game_id, creator_id, title, description, max_players,
-             created_at, game_date, message_id, autodelete),
+             created_at, game_date, location, message_id, autodelete),
         )
 
     return {
@@ -71,6 +72,7 @@ def create_game(creator_id: int, title: str, description: str, max_players: int,
         "players": [],
         "created_at": created_at,
         "game_date": game_date,
+        "location": location,
         "media_files": [],
         "message_id": message_id,
         "photo_id": None,

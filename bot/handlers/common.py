@@ -27,10 +27,12 @@ def format_game(game):
     lines = [
         f"<b>{game['title']}</b>",
         game["description"],
-        f"<b>Гравці:</b> {len(players)}/{game['max_players']}",
     ]
+    if game.get("location"):
+        lines.append(f"<b>Місце:</b> {game['location']}")
     if game.get("game_date"):
         lines.append(f"<b>Дата:</b> {_format_game_date(game['game_date'])}")
+    lines.append(f"<b>Гравці:</b> {len(players)}/{game['max_players']}")
     return "\n".join(lines)
 
 

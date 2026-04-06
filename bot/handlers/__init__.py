@@ -1,9 +1,9 @@
 from bot.handlers.common import cancel, ping, help_cmd, format_game
 
 from bot.handlers.create import (
-    create_start, create_title, create_desc, create_max,
+    create_start, create_title, create_desc, create_max, create_location,
     create_date, create_time, create_image,
-    CREATE_TITLE, CREATE_DESC, CREATE_MAX, CREATE_DATE, CREATE_TIME, CREATE_IMAGE,
+    CREATE_TITLE, CREATE_DESC, CREATE_MAX, CREATE_LOCATION, CREATE_DATE, CREATE_TIME, CREATE_IMAGE,
 )
 
 from bot.handlers.manage import (

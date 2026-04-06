@@ -31,6 +31,7 @@ def edit_field_keyboard():
         ("Назва", "title"),
         ("Опис", "description"),
         ("Макс. гравців", "max_players"),
+        ("Місце", "location"),
         ("Дата", "game_date"),
     ]
     buttons = [
