@@ -49,6 +49,7 @@ async def post_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = join_leave_keyboard(game_id)
     text = format_game(game)
+    thread_id = query.message.message_thread_id
 
     if game.get("photo_id"):
         sent = await query.message.chat.send_photo(
@@ -56,10 +57,12 @@ async def post_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
             caption=text,
             parse_mode="HTML",
             reply_markup=keyboard,
+            message_thread_id=thread_id,
         )
     else:
         sent = await query.message.chat.send_message(
             text, parse_mode="HTML", reply_markup=keyboard,
+            message_thread_id=thread_id,
         )
     data_utils.update_game(game_id, {"message_id": sent.message_id})
     await query.message.delete()
@@ -69,7 +72,7 @@ async def post_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Join / Leave callbacks
 # ---------------------------------------------------------------------------
 
-async def _notify_creator(context, game, user, action, chat_id):
+async def _notify_creator(context, game, user, action, chat, thread_id=None):
     """Send a DM to the game creator about a join/leave action."""
     creator_id = game.get("creator_id")
     if not creator_id:
@@ -81,10 +84,22 @@ async def _notify_creator(context, game, user, action, chat_id):
 
     title = game["title"]
     msg_id = game.get("message_id")
-    if msg_id and chat_id and str(chat_id).startswith("-100"):
-        # Message links only work in supergroups (-100XXXXXXXXXX)
-        link_chat_id = str(chat_id)[4:]
-        title_link = f'<a href="https://t.me/c/{link_chat_id}/{msg_id}">{title}</a>'
+    if msg_id and chat:
+        if chat.username:
+            # Public group/channel — with optional topic
+            if thread_id:
+                title_link = f'<a href="https://t.me/{chat.username}/{thread_id}/{msg_id}">{title}</a>'
+            else:
+                title_link = f'<a href="https://t.me/{chat.username}/{msg_id}">{title}</a>'
+        elif str(chat.id).startswith("-100"):
+            # Private supergroup — with optional topic
+            link_chat_id = str(chat.id)[4:]
+            if thread_id:
+                title_link = f'<a href="https://t.me/c/{link_chat_id}/{thread_id}/{msg_id}">{title}</a>'
+            else:
+                title_link = f'<a href="https://t.me/c/{link_chat_id}/{msg_id}">{title}</a>'
+        else:
+            title_link = f"<b>{title}</b>"
     else:
         title_link = f"<b>{title}</b>"
 
@@ -150,7 +165,7 @@ async def join_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game = data_utils.get_game(game_id)
     await query.answer("Ви записались!")
     await _update_posted_message(query, game, game_id)
-    await _notify_creator(context, game, update.effective_user, "записався на", query.message.chat_id)
+    await _notify_creator(context, game, update.effective_user, "записався на", query.message.chat, query.message.message_thread_id)
 
 
 @ensure_user
@@ -178,7 +193,7 @@ async def leave_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game = data_utils.get_game(game_id)
     await query.answer("Ви відписались.")
     await _update_posted_message(query, game, game_id)
-    await _notify_creator(context, game, update.effective_user, "відписався від", query.message.chat_id)
+    await _notify_creator(context, game, update.effective_user, "відписався від", query.message.chat, query.message.message_thread_id)
 
 
 # ---------------------------------------------------------------------------
