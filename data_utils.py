@@ -178,7 +178,7 @@ def get_games_by_creator(creator_id: int) -> List[Dict]:
         return [_row_to_game(row, conn) for row in rows]
 
 
-def add_player(game_id: str, player_id: int) -> bool:
+def add_player(game_id: str, player_id: int, used_slot: bool = False) -> bool:
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute("SELECT 1 FROM games WHERE game_id = %s", (game_id,))
@@ -186,13 +186,23 @@ def add_player(game_id: str, player_id: int) -> bool:
             return False
         try:
             cur.execute(
-                "INSERT INTO game_players (game_id, user_id) VALUES (%s, %s)",
-                (game_id, player_id),
+                "INSERT INTO game_players (game_id, user_id, used_slot) VALUES (%s, %s, %s)",
+                (game_id, player_id, used_slot),
             )
             return True
         except Exception:
             conn.rollback()
             return False
+
+
+def get_players_with_slots(game_id: str) -> List[Dict]:
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT user_id, used_slot FROM game_players WHERE game_id = %s ORDER BY joined_at",
+            (game_id,),
+        )
+        return [{"user_id": row[0], "used_slot": row[1]} for row in cur.fetchall()]
 
 
 def remove_player(game_id: str, player_id: int) -> bool:

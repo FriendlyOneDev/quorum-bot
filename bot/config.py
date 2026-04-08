@@ -1,0 +1,4 @@
+import os
+
+ANNOUNCEMENTS_CHAT = os.getenv("ANNOUNCEMENTS_CHAT")
+ANNOUNCEMENTS_TOPIC = int(os.getenv("ANNOUNCEMENTS_TOPIC", "0")) or None

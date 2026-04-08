@@ -5,6 +5,14 @@ from telegram.ext import ContextTypes, ConversationHandler
 import data_utils
 
 
+async def _reply(update, text):
+    """Reply via message or callback query alert, whichever is available."""
+    if update.callback_query:
+        await update.callback_query.answer(text, show_alert=True)
+    elif update.message:
+        await update.message.reply_text(text)
+
+
 def ensure_user(func):
     """Auto-register the calling user on every handler invocation."""
     @wraps(func)
@@ -25,9 +33,7 @@ def require_private(func):
     @wraps(func)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         if update.effective_chat.type != "private":
-            await update.message.reply_text(
-                "Ця команда працює лише в особистих повідомленнях. Напишіть мені в ЛС!"
-            )
+            await _reply(update, "Ця команда працює лише в особистих повідомленнях. Напишіть мені в ЛС!")
             return ConversationHandler.END
         return await func(update, context, *args, **kwargs)
     return wrapper
@@ -38,9 +44,7 @@ def require_group(func):
     @wraps(func)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         if update.effective_chat.type not in ("group", "supergroup"):
-            await update.message.reply_text(
-                "Ця команда працює лише в групових чатах."
-            )
+            await _reply(update, "Ця команда працює лише в групових чатах.")
             return ConversationHandler.END
         return await func(update, context, *args, **kwargs)
     return wrapper
@@ -52,9 +56,7 @@ def require_gm(func):
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user_id = update.effective_user.id
         if not data_utils.has_gm_permission(user_id):
-            await update.message.reply_text(
-                "Ця команда доступна лише для Майстрів (GM)."
-            )
+            await _reply(update, "Ця команда доступна лише для Майстрів (GM).")
             return ConversationHandler.END
         return await func(update, context, *args, **kwargs)
     return wrapper
@@ -66,9 +68,7 @@ def require_admin(func):
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user_id = update.effective_user.id
         if not data_utils.is_admin(user_id):
-            await update.message.reply_text(
-                "Ця команда доступна лише для адміністраторів."
-            )
+            await _reply(update, "Ця команда доступна лише для адміністраторів.")
             return ConversationHandler.END
         return await func(update, context, *args, **kwargs)
     return wrapper

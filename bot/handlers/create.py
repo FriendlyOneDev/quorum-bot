@@ -1,4 +1,4 @@
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 
 import data_utils
@@ -123,7 +123,15 @@ async def _finish_create(reply_target, context):
         data_utils.update_game(game["game_id"], {"photo_id": photo_id})
     context.user_data.clear()
 
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("Так", callback_data=f"publish_now:{game['game_id']}"),
+            InlineKeyboardButton("Ні", callback_data="publish_skip"),
+        ]
+    ])
     await reply_target.reply_text(
-        f"Гру створено!\n\n{format_game(game)}", parse_mode="HTML"
+        f"Гру створено!\n\n{format_game(game)}\n\nОпублікувати зараз?",
+        parse_mode="HTML",
+        reply_markup=keyboard,
     )
     return ConversationHandler.END

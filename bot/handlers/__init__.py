@@ -16,6 +16,7 @@ from bot.handlers.manage import (
 
 from bot.handlers.post import (
     post_start, post_select,
+    publish_now_callback, publish_skip_callback,
     join_game, leave_game,
     rollcall_start, rollcall_select,
 )

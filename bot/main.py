@@ -31,8 +31,9 @@ from bot.handlers import (
     # /delete
     delete_start, delete_select, delete_confirm,
     DELETE_SELECT, DELETE_CONFIRM,
-    # /post + join/leave
+    # /post + join/leave + publish
     post_start, post_select,
+    publish_now_callback, publish_skip_callback,
     join_game, leave_game,
     # /rollcall
     rollcall_start, rollcall_select,
@@ -175,6 +176,8 @@ if __name__ == "__main__":
 
     # Standalone callback handlers
     app.add_handler(CallbackQueryHandler(post_select, pattern=r"^post:"))
+    app.add_handler(CallbackQueryHandler(publish_now_callback, pattern=r"^publish_now:"))
+    app.add_handler(CallbackQueryHandler(publish_skip_callback, pattern=r"^publish_skip$"))
     app.add_handler(CallbackQueryHandler(rollcall_select, pattern=r"^rollcall:"))
     app.add_handler(CallbackQueryHandler(join_game, pattern=r"^join:"))
     app.add_handler(CallbackQueryHandler(leave_game, pattern=r"^leave:"))

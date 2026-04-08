@@ -6,6 +6,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 import data_utils
 from bot.handlers.common import format_game
 from bot.handlers.decorators import ensure_user, require_private, require_gm
+from bot.handlers.post import update_posted_message, delete_posted_message
 from bot.keyboards import game_list_keyboard, edit_field_keyboard, confirm_delete_keyboard
 
 # Conversation states
@@ -127,6 +128,11 @@ async def edit_value(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"Гру оновлено!\n\n{format_game(game)}", parse_mode="HTML"
     )
+
+    # Auto-sync posted message in announcements
+    if game.get("message_id"):
+        await update_posted_message(context.bot, game, game_id)
+
     return ConversationHandler.END
 
 
@@ -179,6 +185,27 @@ async def delete_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     game_id = query.data.split(":", 1)[1]
-    data_utils.delete_game(game_id)
-    await query.edit_message_text("Гру видалено.")
+    game = data_utils.get_game(game_id)
+
+    if game:
+        # Delete posted message from announcements
+        await delete_posted_message(context.bot, game)
+
+        # Refund slots to players who used one
+        players_info = data_utils.get_players_with_slots(game_id)
+        refunded = 0
+        for p in players_info:
+            if p["used_slot"]:
+                data_utils.add_slots(p["user_id"], 1)
+                refunded += 1
+
+        data_utils.delete_game(game_id)
+
+        msg = "Гру видалено."
+        if refunded > 0:
+            msg += f" Повернуто слоти {refunded} гравцям."
+        await query.edit_message_text(msg)
+    else:
+        await query.edit_message_text("Гру не знайдено.")
+
     return ConversationHandler.END
