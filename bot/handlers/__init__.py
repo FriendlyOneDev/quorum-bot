@@ -1,4 +1,4 @@
-from bot.handlers.common import cancel, ping, help_cmd, format_game
+from bot.handlers.common import cancel, ping, help_cmd, format_game, resolve_player_names
 
 from bot.handlers.create import (
     create_start, create_title, create_desc, create_max, create_location,

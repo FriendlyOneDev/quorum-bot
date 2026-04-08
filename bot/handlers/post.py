@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 import data_utils
-from bot.handlers.common import format_game
+from bot.handlers.common import format_game, resolve_player_names
 from bot.handlers.decorators import ensure_user, require_group, require_gm
 from bot.keyboards import game_list_keyboard, join_leave_keyboard
 
@@ -48,7 +48,9 @@ async def post_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     keyboard = join_leave_keyboard(game_id)
-    text = format_game(game)
+    chat_id = query.message.chat.id
+    player_names = await resolve_player_names(context.bot, chat_id, game.get("players", []))
+    text = format_game(game, player_names)
     thread_id = query.message.message_thread_id
 
     if game.get("photo_id"):
@@ -78,7 +80,16 @@ async def _notify_creator(context, game, user, action, chat, thread_id=None):
     if not creator_id:
         return
 
-    user_mention = f'<a href="tg://user?id={user.id}">@{user.username or user.full_name}</a>'
+    # Resolve custom_title for the user
+    display = f"@{user.username or user.full_name}"
+    try:
+        member = await context.bot.get_chat_member(chat.id, user.id)
+        ct = getattr(member, "custom_title", None)
+        if ct:
+            display = f"@{user.username or user.full_name}({ct})"
+    except Exception:
+        pass
+    user_mention = f'<a href="tg://user?id={user.id}">{display}</a>'
     players = game.get("players", [])
     max_players = game["max_players"]
 
@@ -117,8 +128,10 @@ async def _notify_creator(context, game, user, action, chat, thread_id=None):
         pass
 
 
-async def _update_posted_message(query, game, game_id):
-    text = format_game(game)
+async def _update_posted_message(query, context, game, game_id):
+    chat_id = query.message.chat.id
+    player_names = await resolve_player_names(context.bot, chat_id, game.get("players", []))
+    text = format_game(game, player_names)
     keyboard = join_leave_keyboard(game_id)
     if query.message.photo:
         await query.edit_message_caption(
@@ -164,7 +177,7 @@ async def join_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data_utils.add_player(game_id, player_id)
     game = data_utils.get_game(game_id)
     await query.answer("Ви записались!")
-    await _update_posted_message(query, game, game_id)
+    await _update_posted_message(query, context, game, game_id)
     await _notify_creator(context, game, update.effective_user, "записався на", query.message.chat, query.message.message_thread_id)
 
 
@@ -192,7 +205,7 @@ async def leave_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     game = data_utils.get_game(game_id)
     await query.answer("Ви відписались.")
-    await _update_posted_message(query, game, game_id)
+    await _update_posted_message(query, context, game, game_id)
     await _notify_creator(context, game, update.effective_user, "відписався від", query.message.chat, query.message.message_thread_id)
 
 
@@ -245,11 +258,11 @@ async def rollcall_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    mention_parts = []
-    for pid in players:
-        user = data_utils.get_user(pid)
-        name = (user.get("display_name") or user.get("username") or str(pid)) if user else str(pid)
-        mention_parts.append(f'<a href="tg://user?id={pid}">{name}</a>')
+    player_names = await resolve_player_names(context.bot, query.message.chat.id, players)
+    mention_parts = [
+        f'<a href="tg://user?id={pid}">{player_names.get(pid, str(pid))}</a>'
+        for pid in players
+    ]
     mentions = " ".join(mention_parts)
 
     await query.message.delete()

@@ -22,7 +22,7 @@ def _format_game_date(game_date_str: str) -> str:
         return game_date_str
 
 
-def format_game(game):
+def format_game(game, player_names=None):
     players = game.get("players", [])
     lines = [
         f"<b>{game['title']}</b>",
@@ -34,8 +34,38 @@ def format_game(game):
         lines.append(f"<b>Дата:</b> {_format_game_date(game['game_date'])}")
     if game.get("tone"):
         lines.append(f"<b>Тон:</b> {game['tone']}")
-    lines.append(f"<b>Гравці:</b> {len(players)}/{game['max_players']}")
+
+    if player_names and players:
+        names = ", ".join(player_names.get(pid, "?") for pid in players)
+        lines.append(f"<b>Гравці ({len(players)}/{game['max_players']}):</b> {names}")
+    else:
+        lines.append(f"<b>Гравці:</b> {len(players)}/{game['max_players']}")
+
     return "\n".join(lines)
+
+
+async def resolve_player_names(bot, chat_id, player_ids):
+    """Resolve player display names: tag → display_name from DB."""
+    names = {}
+    for pid in player_ids:
+        name = None
+        # Try to get custom_title (character name) from chat member
+        try:
+            member = await bot.get_chat_member(chat_id, pid)
+            title = getattr(member, "custom_title", None)
+            if title:
+                name = title
+        except Exception:
+            pass
+        # Fallback to DB display name
+        if not name:
+            user = data_utils.get_user(pid)
+            if user:
+                name = user.get("display_name") or user.get("username") or str(pid)
+            else:
+                name = str(pid)
+        names[pid] = name
+    return names
 
 
 @ensure_user
