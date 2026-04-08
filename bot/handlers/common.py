@@ -49,12 +49,10 @@ async def resolve_player_names(bot, chat_id, player_ids):
     names = {}
     for pid in player_ids:
         name = None
-        # Try to get custom_title (character name) from chat member
+        # Try to get tag (regular members) or custom_title (admins)
         try:
             member = await bot.get_chat_member(chat_id, pid)
-            title = getattr(member, "custom_title", None)
-            if title:
-                name = title
+            name = getattr(member, "tag", None) or getattr(member, "custom_title", None)
         except Exception:
             pass
         # Fallback to DB display name

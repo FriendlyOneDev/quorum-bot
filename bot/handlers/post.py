@@ -186,14 +186,14 @@ async def _notify_creator(context, game, user, action):
     if not creator_id:
         return
 
-    # Resolve custom_title for the user
+    # Resolve tag (regular members) or custom_title (admins)
     display = f"@{user.username or user.full_name}"
     if ANNOUNCEMENTS_CHAT:
         try:
             member = await context.bot.get_chat_member(ANNOUNCEMENTS_CHAT, user.id)
-            ct = getattr(member, "custom_title", None)
-            if ct:
-                display = f"@{user.username or user.full_name}({ct})"
+            char_name = getattr(member, "tag", None) or getattr(member, "custom_title", None)
+            if char_name:
+                display = f"@{user.username or user.full_name}({char_name})"
         except Exception:
             pass
     user_mention = f'<a href="tg://user?id={user.id}">{display}</a>'
