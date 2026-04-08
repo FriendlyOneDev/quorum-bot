@@ -117,7 +117,7 @@ if __name__ == "__main__":
             CREATE_TIME: [CallbackQueryHandler(create_time, pattern=r"^time:")],
             CREATE_TONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_tone)],
             CREATE_IMAGE: [
-                MessageHandler(filters.PHOTO, create_image),
+                MessageHandler(filters.PHOTO | filters.ANIMATION, create_image),
                 CommandHandler("skip", create_image),
             ],
         },

@@ -66,7 +66,16 @@ async def _post_game_to_announcements(bot, game):
     keyboard = join_leave_keyboard(game["game_id"])
 
     try:
-        if game.get("photo_id"):
+        if game.get("photo_id") and game.get("media_type") == "animation":
+            return await bot.send_animation(
+                chat_id=ANNOUNCEMENTS_CHAT,
+                animation=game["photo_id"],
+                caption=text,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+                message_thread_id=ANNOUNCEMENTS_TOPIC,
+            )
+        elif game.get("photo_id"):
             return await bot.send_photo(
                 chat_id=ANNOUNCEMENTS_CHAT,
                 photo=game["photo_id"],

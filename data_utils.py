@@ -11,7 +11,7 @@ TIMEZONE = ZoneInfo(os.getenv("TIMEZONE", "Europe/Kyiv"))
 # Column lists for consistent dict assembly
 _GAME_COLS = (
     "game_id", "creator_id", "title", "description", "max_players",
-    "created_at", "game_date", "location", "tone", "message_id", "photo_id", "autodelete",
+    "created_at", "game_date", "location", "tone", "message_id", "photo_id", "media_type", "autodelete",
 )
 _USER_COLS = ("user_id", "username", "display_name", "role", "slots", "slots_week")
 
@@ -57,8 +57,8 @@ def create_game(creator_id: int, title: str, description: str, max_players: int,
 
         cur.execute(
             """INSERT INTO games (game_id, creator_id, title, description, max_players,
-                                  created_at, game_date, location, tone, message_id, photo_id, autodelete)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s)""",
+                                  created_at, game_date, location, tone, message_id, photo_id, media_type, autodelete)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, %s)""",
             (game_id, creator_id, title, description, max_players,
              created_at, game_date, location, tone, message_id, autodelete),
         )
@@ -77,6 +77,7 @@ def create_game(creator_id: int, title: str, description: str, max_players: int,
         "media_files": [],
         "message_id": message_id,
         "photo_id": None,
+        "media_type": None,
         "autodelete": autodelete,
     }
 

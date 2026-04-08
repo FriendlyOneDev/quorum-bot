@@ -97,7 +97,7 @@ async def create_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @ensure_user
 async def create_tone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["create_tone"] = update.message.text
-    await update.message.reply_text("Надішліть фото для гри або /skip:")
+    await update.message.reply_text("Надішліть фото або GIF для гри, або /skip:")
     return CREATE_IMAGE
 
 
@@ -105,11 +105,16 @@ async def create_tone(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def create_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.photo:
         context.user_data["create_photo_id"] = update.message.photo[-1].file_id
+        context.user_data["create_media_type"] = "photo"
+    elif update.message.animation:
+        context.user_data["create_photo_id"] = update.message.animation.file_id
+        context.user_data["create_media_type"] = "animation"
     return await _finish_create(update.message, context)
 
 
 async def _finish_create(reply_target, context):
     photo_id = context.user_data.get("create_photo_id")
+    media_type = context.user_data.get("create_media_type")
     game = data_utils.create_game(
         creator_id=context._user_id,
         title=context.user_data["create_title"],
@@ -120,7 +125,7 @@ async def _finish_create(reply_target, context):
         tone=context.user_data.get("create_tone"),
     )
     if photo_id:
-        data_utils.update_game(game["game_id"], {"photo_id": photo_id})
+        data_utils.update_game(game["game_id"], {"photo_id": photo_id, "media_type": media_type})
     context.user_data.clear()
 
     keyboard = InlineKeyboardMarkup([
