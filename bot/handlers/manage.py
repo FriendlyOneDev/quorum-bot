@@ -90,6 +90,7 @@ async def edit_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "description": "опис",
         "max_players": "макс. гравців",
         "location": "місце проведення",
+        "tone": "тон гри",
         "game_date": "дату (РРРР-ММ-ДД ГГ:ХХ)",
     }
     await query.edit_message_text(f"Введіть нове значення для {labels[field]}:")
