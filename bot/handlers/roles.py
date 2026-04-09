@@ -2,7 +2,8 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 import data_utils
-from bot.handlers.decorators import ensure_user, require_private, require_admin
+from bot.handlers.decorators import ensure_user, require_private, require_admin, require_gm
+from bot.handlers.post import update_posted_message
 
 
 # ---------------------------------------------------------------------------
@@ -41,6 +42,33 @@ async def setrole(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"Роль {name} змінено на {role_label}."
     )
+
+
+# ---------------------------------------------------------------------------
+# /setname — GM sets their custom display name
+# ---------------------------------------------------------------------------
+
+@ensure_user
+@require_private
+@require_gm
+async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args
+    if not args:
+        await update.message.reply_text("Використання: /setname Ваше ім'я")
+        return
+
+    name = " ".join(args)
+    data_utils.update_user(update.effective_user.id, {"custom_name": name})
+    await update.message.reply_text(f"Ваше ім'я ГМ змінено на: {name}")
+
+    # Update all posted games by this GM
+    games = data_utils.get_games_by_creator(update.effective_user.id)
+    for game in games:
+        if game.get("message_id"):
+            try:
+                await update_posted_message(context.bot, game, game["game_id"])
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------

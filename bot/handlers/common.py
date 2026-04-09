@@ -22,12 +22,24 @@ def _format_game_date(game_date_str: str) -> str:
         return game_date_str
 
 
+def _get_gm_display_name(creator_id):
+    """Get GM display name: custom_name → display_name → username."""
+    user = data_utils.get_user(creator_id)
+    if not user:
+        return None
+    return user.get("custom_name") or user.get("display_name") or user.get("username")
+
+
 def format_game(game, player_names=None):
     players = game.get("players", [])
+    gm_name = _get_gm_display_name(game.get("creator_id"))
     lines = [
         f"<b>{game['title']}</b>",
         game["description"],
+        "",
     ]
+    if gm_name:
+        lines.append(f"<b>ГМ:</b> {gm_name}")
     if game.get("location"):
         lines.append(f"<b>Місце:</b> {game['location']}")
     if game.get("game_date"):
@@ -113,6 +125,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append("/giveslot — Дати слот гравцю")
         lines.append("/giveslots — Дати слот всім гравцям")
         lines.append("/register — Кнопка реєстрації в групі")
+        lines.append("/setname — Змінити своє ім'я ГМ")
 
     if data_utils.is_admin(user_id):
         lines.append("\n<b>Команди адміна:</b>")

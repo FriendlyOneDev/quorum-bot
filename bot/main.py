@@ -40,7 +40,7 @@ from bot.handlers import (
     # slots
     giveslot, giveslots, myslots,
     # roles
-    setrole, whoami, users_list,
+    setrole, setname, whoami, users_list,
     # register
     register_start, register_callback,
 )
@@ -57,6 +57,16 @@ async def on_startup(app):
 
     # One-time migration from old JSON format
     data_utils.migrate_from_events()
+
+    # Refresh all posted game announcements
+    from bot.handlers.post import update_posted_message
+    games = data_utils.get_all_games()
+    for game in games:
+        if game.get("message_id"):
+            try:
+                await update_posted_message(app.bot, game, game["game_id"])
+            except Exception:
+                pass
 
     # Seed admin user
     if admin_id:
@@ -168,6 +178,7 @@ if __name__ == "__main__":
 
     # Role commands
     app.add_handler(CommandHandler("setrole", setrole))
+    app.add_handler(CommandHandler("setname", setname))
     app.add_handler(CommandHandler("whoami", whoami))
     app.add_handler(CommandHandler("users", users_list))
 

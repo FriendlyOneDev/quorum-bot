@@ -13,7 +13,7 @@ _GAME_COLS = (
     "game_id", "creator_id", "title", "description", "max_players",
     "created_at", "game_date", "location", "tone", "message_id", "photo_id", "media_type", "autodelete",
 )
-_USER_COLS = ("user_id", "username", "display_name", "role", "slots", "slots_week")
+_USER_COLS = ("user_id", "username", "display_name", "custom_name", "role", "slots", "slots_week")
 
 
 def _row_to_game(row, conn) -> Dict:
@@ -254,16 +254,16 @@ def get_or_create_user(user_id: int, username: str = None, display_name: str = N
                 set_parts.append("display_name = EXCLUDED.display_name")
             set_clause = ", ".join(set_parts)
             cur.execute(
-                f"""INSERT INTO users (user_id, username, display_name, role, slots, slots_week)
-                    VALUES (%s, %s, %s, 'user', 1, %s)
+                f"""INSERT INTO users (user_id, username, display_name, custom_name, role, slots, slots_week)
+                    VALUES (%s, %s, %s, NULL, 'user', 1, %s)
                     ON CONFLICT (user_id) DO UPDATE SET {set_clause}
                     RETURNING {', '.join(_USER_COLS)}""",
                 (user_id, username, display_name, slots_week),
             )
         else:
             cur.execute(
-                f"""INSERT INTO users (user_id, username, display_name, role, slots, slots_week)
-                    VALUES (%s, %s, %s, 'user', 1, %s)
+                f"""INSERT INTO users (user_id, username, display_name, custom_name, role, slots, slots_week)
+                    VALUES (%s, %s, %s, NULL, 'user', 1, %s)
                     ON CONFLICT (user_id) DO NOTHING
                     RETURNING {', '.join(_USER_COLS)}""",
                 (user_id, username, display_name, slots_week),

@@ -22,5 +22,5 @@ from bot.handlers.post import (
 )
 
 from bot.handlers.slots import giveslot, giveslots, myslots
-from bot.handlers.roles import setrole, whoami, users_list
+from bot.handlers.roles import setrole, setname, whoami, users_list
 from bot.handlers.register import register_start, register_callback
