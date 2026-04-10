@@ -28,10 +28,24 @@ def get_conn():
     p = _get_pool()
     conn = p.getconn()
     try:
+        # Test if connection is alive
+        if conn.closed:
+            p.putconn(conn, close=True)
+            conn = p.getconn()
+        else:
+            try:
+                conn.cursor().execute("SELECT 1")
+                conn.rollback()
+            except Exception:
+                p.putconn(conn, close=True)
+                conn = p.getconn()
         yield conn
         conn.commit()
     except Exception:
-        conn.rollback()
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         raise
     finally:
         p.putconn(conn)
