@@ -195,4 +195,4 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(register_callback, pattern=r"^register_me$"))
     app.add_handler(CallbackQueryHandler(cancel, pattern=r"^cancel$"))
 
-    app.run_polling()
+    app.run_polling(allowed_updates=["message", "callback_query"])
