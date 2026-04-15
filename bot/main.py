@@ -1,3 +1,4 @@
+import asyncio
 import os
 import traceback
 from datetime import datetime
@@ -15,6 +16,7 @@ from dotenv import load_dotenv
 
 import db
 import data_utils
+from bot.config import REFRESH_INTERVAL_MINUTES
 from bot.handlers import (
     ping,
     cancel,
@@ -51,6 +53,24 @@ api_key = os.getenv("TELEGRAM_TOKEN")
 admin_id = int(os.getenv("ADMIN_ID")) if os.getenv("ADMIN_ID") else None
 
 
+async def _refresh_all_posts(bot):
+    from bot.handlers.post import update_posted_message
+    games = data_utils.get_all_games()
+    for game in games:
+        if game.get("message_id"):
+            try:
+                await update_posted_message(bot, game, game["game_id"])
+            except Exception:
+                pass
+
+
+async def _periodic_refresh(bot):
+    interval = REFRESH_INTERVAL_MINUTES * 60
+    while True:
+        await asyncio.sleep(interval)
+        await _refresh_all_posts(bot)
+
+
 async def on_startup(app):
     # Run database migrations
     db.init_db()
@@ -59,14 +79,10 @@ async def on_startup(app):
     data_utils.migrate_from_events()
 
     # Refresh all posted game announcements
-    from bot.handlers.post import update_posted_message
-    games = data_utils.get_all_games()
-    for game in games:
-        if game.get("message_id"):
-            try:
-                await update_posted_message(app.bot, game, game["game_id"])
-            except Exception:
-                pass
+    await _refresh_all_posts(app.bot)
+
+    # Start periodic refresh task
+    asyncio.create_task(_periodic_refresh(app.bot))
 
     # Seed admin user
     if admin_id:

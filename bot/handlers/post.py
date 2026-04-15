@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -6,6 +8,26 @@ from bot.config import ANNOUNCEMENTS_CHAT, ANNOUNCEMENTS_TOPIC
 from bot.handlers.common import format_game, resolve_player_names
 from bot.handlers.decorators import ensure_user, require_private, require_gm
 from bot.keyboards import game_list_keyboard, join_leave_keyboard
+
+
+def _is_game_started(game):
+    """Check if the game's scheduled time has passed."""
+    game_date = game.get("game_date")
+    if not game_date:
+        return False
+    try:
+        dt = datetime.strptime(game_date, "%Y-%m-%d %H:%M")
+        dt = dt.replace(tzinfo=data_utils.TIMEZONE)
+        return datetime.now(data_utils.TIMEZONE) >= dt
+    except ValueError:
+        return False
+
+
+def _keyboard_for(game, game_id):
+    """Return join/leave keyboard if game hasn't started, else None to hide buttons."""
+    if _is_game_started(game):
+        return None
+    return join_leave_keyboard(game_id)
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +85,7 @@ async def _post_game_to_announcements(bot, game):
 
     player_names = await resolve_player_names(bot, ANNOUNCEMENTS_CHAT, game.get("players", []))
     text = format_game(game, player_names)
-    keyboard = join_leave_keyboard(game["game_id"])
+    keyboard = _keyboard_for(game, game["game_id"])
 
     try:
         if game.get("photo_id") and game.get("media_type") == "animation":
@@ -138,7 +160,7 @@ async def update_posted_message(bot, game, game_id):
 
     player_names = await resolve_player_names(bot, ANNOUNCEMENTS_CHAT, game.get("players", []))
     text = format_game(game, player_names)
-    keyboard = join_leave_keyboard(game_id)
+    keyboard = _keyboard_for(game, game_id)
 
     try:
         if game.get("photo_id"):
@@ -252,6 +274,10 @@ async def join_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("Ця гра більше не існує.", show_alert=True)
         return
 
+    if _is_game_started(game):
+        await query.answer("Гра вже розпочалась.", show_alert=True)
+        return
+
     player_id = update.effective_user.id
 
     if player_id in game["players"]:
@@ -290,6 +316,10 @@ async def leave_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not game:
         await query.answer("Ця гра більше не існує.", show_alert=True)
+        return
+
+    if _is_game_started(game):
+        await query.answer("Гра вже розпочалась.", show_alert=True)
         return
 
     player_id = update.effective_user.id
