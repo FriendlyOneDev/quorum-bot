@@ -363,19 +363,19 @@ def test_consume_slot_empty():
     assert consume_slot(111) is False
 
 
-def test_slots_expire_on_new_week():
+def test_slots_reset_to_weekly_allowance_on_new_week():
     get_or_create_user(111, "alice", "Alice")
     add_slots(111, 5)
     # Simulate week change
     update_user(111, {"slots_week": "2020-W01"})
-    assert get_slots(111) == 0
+    assert get_slots(111) == 1  # Weekly allowance
 
 
 def test_add_slots_on_new_week():
     get_or_create_user(111, "alice", "Alice")
     update_user(111, {"slots_week": "2020-W01"})
     add_slots(111, 2)
-    assert get_slots(111) == 2
+    assert get_slots(111) == 3  # 1 weekly + 2 added
 
 
 # ---------------------------------------------------------------------------

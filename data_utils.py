@@ -362,14 +362,17 @@ def has_gm_permission(user_id: int) -> bool:
 # Slots
 # ---------------------------------------------------------------------------
 
+WEEKLY_SLOT_ALLOWANCE = 1
+
+
 def get_slots(user_id: int) -> int:
     user = get_user(user_id)
     if not user:
         return 0
     current_week = _current_week()
     if user.get("slots_week") != current_week:
-        update_user(user_id, {"slots": 0, "slots_week": current_week})
-        return 0
+        update_user(user_id, {"slots": WEEKLY_SLOT_ALLOWANCE, "slots_week": current_week})
+        return WEEKLY_SLOT_ALLOWANCE
     return user.get("slots", 0)
 
 
@@ -379,7 +382,7 @@ def add_slots(user_id: int, count: int = 1) -> bool:
         return False
     current_week = _current_week()
     if user.get("slots_week") != current_week:
-        new_slots = max(0, count)
+        new_slots = max(0, WEEKLY_SLOT_ALLOWANCE + count)
         update_user(user_id, {"slots": new_slots, "slots_week": current_week})
     else:
         new_slots = max(0, user.get("slots", 0) + count)
