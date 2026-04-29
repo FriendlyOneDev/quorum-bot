@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from telegram import Update
@@ -8,6 +9,8 @@ from bot.config import ANNOUNCEMENTS_CHAT, ANNOUNCEMENTS_TOPIC
 from bot.handlers.common import format_game, resolve_player_names
 from bot.handlers.decorators import ensure_user, require_private, require_gm
 from bot.keyboards import game_list_keyboard, join_leave_keyboard
+
+logger = logging.getLogger(__name__)
 
 
 def _is_game_started(game):
@@ -86,6 +89,11 @@ async def _post_game_to_announcements(bot, game):
     player_names = await resolve_player_names(bot, ANNOUNCEMENTS_CHAT, game.get("players", []))
     text = format_game(game, player_names)
     keyboard = _keyboard_for(game, game["game_id"])
+    logger.info(
+        "POST game=%s players=%d/%d started=%s",
+        game["game_id"], len(game.get("players", [])),
+        game["max_players"], _is_game_started(game),
+    )
 
     try:
         if game.get("photo_id") and game.get("media_type") == "animation":
@@ -161,6 +169,11 @@ async def update_posted_message(bot, game, game_id):
     player_names = await resolve_player_names(bot, ANNOUNCEMENTS_CHAT, game.get("players", []))
     text = format_game(game, player_names)
     keyboard = _keyboard_for(game, game_id)
+    logger.info(
+        "UPDATE game=%s msg_id=%s players=%d/%d started=%s",
+        game_id, msg_id, len(game.get("players", [])),
+        game["max_players"], _is_game_started(game),
+    )
 
     try:
         if game.get("photo_id"):
@@ -303,6 +316,11 @@ async def join_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data_utils.add_player(game_id, player_id, used_slot=used_slot)
     game = data_utils.get_game(game_id)
+    logger.info(
+        "JOIN game=%s user=%s used_slot=%s players=%d/%d",
+        game_id, player_id, used_slot,
+        len(game["players"]), game["max_players"],
+    )
     await query.answer("Ви записались!")
     await update_posted_message(context.bot, game, game_id)
     await _notify_creator(context, game, update.effective_user, "записався на")
@@ -340,6 +358,11 @@ async def leave_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data_utils.add_slots(player_id, 1)
 
     game = data_utils.get_game(game_id)
+    logger.info(
+        "LEAVE game=%s user=%s refunded=%s players=%d/%d",
+        game_id, player_id, player_used_slot,
+        len(game["players"]), game["max_players"],
+    )
     await query.answer("Ви відписались.")
     await update_posted_message(context.bot, game, game_id)
     await _notify_creator(context, game, update.effective_user, "відписався від")
@@ -350,7 +373,6 @@ async def leave_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------------------------------------------------------------------------
 
 @ensure_user
-@require_private
 @require_gm
 async def rollcall_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -394,29 +416,28 @@ async def rollcall_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    chat_id = ANNOUNCEMENTS_CHAT or query.message.chat.id
-    player_names = await resolve_player_names(context.bot, chat_id, players)
-    mention_parts = [
-        f'<a href="tg://user?id={pid}">{player_names.get(pid, str(pid))}</a>'
-        for pid in players
-    ]
+    # Build mentions: prefer @username (triggers notifications), fallback to text_mention
+    name_chat = ANNOUNCEMENTS_CHAT or query.message.chat.id
+    player_names = await resolve_player_names(context.bot, name_chat, players)
+
+    mention_parts = []
+    for pid in players:
+        user = data_utils.get_user(pid)
+        username = user.get("username") if user else None
+        display = player_names.get(pid, str(pid))
+        if username:
+            mention_parts.append(f"@{username}")
+        else:
+            mention_parts.append(f'<a href="tg://user?id={pid}">{display}</a>')
     mentions = " ".join(mention_parts)
 
-    if ANNOUNCEMENTS_CHAT:
-        # Send rollcall to announcements channel
-        await query.edit_message_text("Перекличку надіслано!")
-        try:
-            await context.bot.send_message(
-                chat_id=ANNOUNCEMENTS_CHAT,
-                text=f"Перекличка для <b>{game['title']}</b>:\n\n{mentions}",
-                parse_mode="HTML",
-                message_thread_id=ANNOUNCEMENTS_TOPIC,
-            )
-        except Exception:
-            pass
-    else:
-        await query.message.delete()
-        await query.message.chat.send_message(
-            f"Перекличка для <b>{game['title']}</b>:\n\n{mentions}",
-            parse_mode="HTML",
-        )
+    target_chat = query.message.chat
+    thread_id = query.message.message_thread_id
+
+    await query.message.delete()
+    await context.bot.send_message(
+        chat_id=target_chat.id,
+        text=f"Перекличка для <b>{game['title']}</b>:\n\n{mentions}",
+        parse_mode="HTML",
+        message_thread_id=thread_id,
+    )

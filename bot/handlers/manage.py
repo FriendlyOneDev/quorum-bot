@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from telegram import Update
@@ -7,6 +8,8 @@ import data_utils
 from bot.handlers.common import format_game
 from bot.handlers.decorators import ensure_user, require_private, require_gm
 from bot.handlers.post import update_posted_message, delete_posted_message
+
+logger = logging.getLogger(__name__)
 from bot.keyboards import game_list_keyboard, edit_field_keyboard, confirm_delete_keyboard
 
 # Conversation states
@@ -122,6 +125,7 @@ async def edit_value(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return EDIT_VALUE
 
     data_utils.update_game(game_id, {field: value})
+    logger.info("EDIT game=%s field=%s by user=%s", game_id, field, update.effective_user.id)
     context.user_data.clear()
 
     game = data_utils.get_game(game_id)
@@ -200,6 +204,10 @@ async def delete_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 refunded += 1
 
         data_utils.delete_game(game_id)
+        logger.info(
+            "DELETE game=%s by user=%s refunded=%d",
+            game_id, update.effective_user.id, refunded,
+        )
 
         msg = "Гру видалено."
         if refunded > 0:

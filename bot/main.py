@@ -1,7 +1,15 @@
 import asyncio
+import logging
 import os
 import traceback
 from datetime import datetime
+
+logging.basicConfig(
+    format="%(asctime)s %(name)s %(levelname)s: %(message)s",
+    level=logging.INFO,
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("telegram").setLevel(logging.WARNING)
 
 from telegram.ext import (
     ApplicationBuilder,
@@ -53,15 +61,21 @@ api_key = os.getenv("TELEGRAM_TOKEN")
 admin_id = int(os.getenv("ADMIN_ID")) if os.getenv("ADMIN_ID") else None
 
 
+logger = logging.getLogger(__name__)
+
+
 async def _refresh_all_posts(bot):
     from bot.handlers.post import update_posted_message
     games = data_utils.get_all_games()
+    refreshed = 0
     for game in games:
         if game.get("message_id"):
             try:
                 await update_posted_message(bot, game, game["game_id"])
-            except Exception:
-                pass
+                refreshed += 1
+            except Exception as e:
+                logger.warning("REFRESH failed game=%s: %s", game["game_id"], e)
+    logger.info("REFRESH cycle complete: %d games refreshed", refreshed)
 
 
 async def _periodic_refresh(bot):
