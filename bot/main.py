@@ -109,12 +109,47 @@ async def on_startup(app):
         )
 
 
+_network_error_times: list[float] = []
+_last_network_alert: float = 0.0
+NETWORK_ERROR_WINDOW = 300  # 5 minutes
+NETWORK_ERROR_THRESHOLD = 5  # alert if N+ errors in window
+NETWORK_ALERT_COOLDOWN = 1800  # don't re-alert for 30 minutes
+
+
 async def error_handler(update, context):
-    tb = traceback.format_exception(
-        type(context.error), context.error, context.error.__traceback__
-    )
+    import time
+    err = context.error
+
+    # Filter out transient network/DNS errors but track frequency
+    import httpx
+    from telegram.error import NetworkError, TimedOut
+    if isinstance(err, (httpx.ConnectError, httpx.ReadError, httpx.RemoteProtocolError,
+                        httpx.PoolTimeout, NetworkError, TimedOut)):
+        logger.warning("Transient network error: %s", err)
+
+        global _last_network_alert
+        now = time.time()
+        _network_error_times.append(now)
+        # Prune old timestamps
+        cutoff = now - NETWORK_ERROR_WINDOW
+        _network_error_times[:] = [t for t in _network_error_times if t >= cutoff]
+
+        if (len(_network_error_times) >= NETWORK_ERROR_THRESHOLD
+                and now - _last_network_alert > NETWORK_ALERT_COOLDOWN
+                and admin_id):
+            _last_network_alert = now
+            count = len(_network_error_times)
+            try:
+                await context.bot.send_message(
+                    chat_id=admin_id,
+                    text=f"⚠️ {count} network errors in last {NETWORK_ERROR_WINDOW // 60} min. Last: {err}",
+                )
+            except Exception:
+                pass
+        return
+
+    tb = traceback.format_exception(type(err), err, err.__traceback__)
     msg = f"Error:\n{''.join(tb)}"
-    # Truncate to fit Telegram message limit
     if len(msg) > 4000:
         msg = msg[:4000] + "\n... (truncated)"
 
