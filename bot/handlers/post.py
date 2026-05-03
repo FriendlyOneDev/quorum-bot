@@ -73,18 +73,28 @@ async def post_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Гру не знайдено.")
         return
 
-    sent = await _post_game_to_announcements(context.bot, game)
-    if sent:
-        data_utils.update_game(game_id, {"message_id": sent.message_id})
+    text_msg, photo_msg = await _post_game_to_announcements(context.bot, game)
+    if text_msg:
+        updates = {"message_id": text_msg.message_id}
+        if photo_msg:
+            updates["photo_message_id"] = photo_msg.message_id
+        data_utils.update_game(game_id, updates)
         await query.edit_message_text("Гру опубліковано!")
     else:
         await query.edit_message_text("Не вдалося опублікувати. Перевірте налаштування каналу.")
 
 
+CAPTION_LIMIT = 1024
+
+
 async def _post_game_to_announcements(bot, game):
-    """Post a game to the configured announcements channel. Returns the sent message."""
+    """Post a game to the configured announcements channel.
+
+    Returns a tuple (text_msg, photo_msg) where photo_msg is None if media is in caption.
+    Returns (None, None) on failure.
+    """
     if not ANNOUNCEMENTS_CHAT:
-        return None
+        return None, None
 
     player_names = await resolve_player_names(bot, ANNOUNCEMENTS_CHAT, game.get("players", []))
     text = format_game(game, player_names)
@@ -95,9 +105,42 @@ async def _post_game_to_announcements(bot, game):
         game["max_players"], _is_game_started(game),
     )
 
+    has_media = bool(game.get("photo_id"))
+    is_animation = game.get("media_type") == "animation"
+    needs_split = has_media and len(text) > CAPTION_LIMIT
+
     try:
-        if game.get("photo_id") and game.get("media_type") == "animation":
-            return await bot.send_animation(
+        if not has_media:
+            sent = await bot.send_message(
+                chat_id=ANNOUNCEMENTS_CHAT,
+                text=text,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+                message_thread_id=ANNOUNCEMENTS_TOPIC,
+            )
+            return sent, None
+
+        if needs_split:
+            # Send photo first (no caption, no buttons), then text with buttons
+            send_media = bot.send_animation if is_animation else bot.send_photo
+            media_arg = "animation" if is_animation else "photo"
+            photo_msg = await send_media(
+                chat_id=ANNOUNCEMENTS_CHAT,
+                **{media_arg: game["photo_id"]},
+                message_thread_id=ANNOUNCEMENTS_TOPIC,
+            )
+            text_msg = await bot.send_message(
+                chat_id=ANNOUNCEMENTS_CHAT,
+                text=text,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+                message_thread_id=ANNOUNCEMENTS_TOPIC,
+            )
+            return text_msg, photo_msg
+
+        # Caption fits — single message
+        if is_animation:
+            sent = await bot.send_animation(
                 chat_id=ANNOUNCEMENTS_CHAT,
                 animation=game["photo_id"],
                 caption=text,
@@ -105,8 +148,8 @@ async def _post_game_to_announcements(bot, game):
                 reply_markup=keyboard,
                 message_thread_id=ANNOUNCEMENTS_TOPIC,
             )
-        elif game.get("photo_id"):
-            return await bot.send_photo(
+        else:
+            sent = await bot.send_photo(
                 chat_id=ANNOUNCEMENTS_CHAT,
                 photo=game["photo_id"],
                 caption=text,
@@ -114,16 +157,25 @@ async def _post_game_to_announcements(bot, game):
                 reply_markup=keyboard,
                 message_thread_id=ANNOUNCEMENTS_TOPIC,
             )
-        else:
-            return await bot.send_message(
-                chat_id=ANNOUNCEMENTS_CHAT,
-                text=text,
-                parse_mode="HTML",
-                reply_markup=keyboard,
-                message_thread_id=ANNOUNCEMENTS_TOPIC,
-            )
+        return sent, None
+    except Exception as e:
+        logger.error("POST failed game=%s: %s", game["game_id"], e, exc_info=True)
+        await _notify_admin_post_failure(bot, game, e)
+        return None, None
+
+
+async def _notify_admin_post_failure(bot, game, err):
+    import os
+    admin_id = os.getenv("ADMIN_ID")
+    if not admin_id:
+        return
+    try:
+        await bot.send_message(
+            chat_id=int(admin_id),
+            text=f"Failed to post game {game.get('game_id')}: {type(err).__name__}: {err}",
+        )
     except Exception:
-        return None
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -141,9 +193,12 @@ async def publish_now_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text("Гру не знайдено.")
         return
 
-    sent = await _post_game_to_announcements(context.bot, game)
-    if sent:
-        data_utils.update_game(game_id, {"message_id": sent.message_id})
+    text_msg, photo_msg = await _post_game_to_announcements(context.bot, game)
+    if text_msg:
+        updates = {"message_id": text_msg.message_id}
+        if photo_msg:
+            updates["photo_message_id"] = photo_msg.message_id
+        data_utils.update_game(game_id, updates)
         await query.edit_message_text("Гру опубліковано!")
     else:
         await query.edit_message_text("Не вдалося опублікувати. Перевірте налаштування каналу.")
@@ -175,8 +230,12 @@ async def update_posted_message(bot, game, game_id):
         game["max_players"], _is_game_started(game),
     )
 
+    # If photo is in a separate message, the main msg_id is plain text → use edit_message_text.
+    # Otherwise, caption is part of the photo message → use edit_message_caption.
+    is_caption = bool(game.get("photo_id")) and not game.get("photo_message_id")
+
     try:
-        if game.get("photo_id"):
+        if is_caption:
             await bot.edit_message_caption(
                 chat_id=ANNOUNCEMENTS_CHAT,
                 message_id=msg_id,
@@ -192,8 +251,10 @@ async def update_posted_message(bot, game, game_id):
                 parse_mode="HTML",
                 reply_markup=keyboard,
             )
-    except Exception:
-        pass
+    except Exception as e:
+        # "Message is not modified" is benign — caused by no actual change
+        if "not modified" not in str(e).lower():
+            logger.warning("UPDATE failed game=%s msg_id=%s: %s", game_id, msg_id, e)
 
 
 # ---------------------------------------------------------------------------
@@ -201,14 +262,16 @@ async def update_posted_message(bot, game, game_id):
 # ---------------------------------------------------------------------------
 
 async def delete_posted_message(bot, game):
-    """Delete the posted game message from announcements channel."""
-    msg_id = game.get("message_id")
-    if not msg_id or not ANNOUNCEMENTS_CHAT:
+    """Delete the posted game message(s) from announcements channel."""
+    if not ANNOUNCEMENTS_CHAT:
         return
-    try:
-        await bot.delete_message(chat_id=ANNOUNCEMENTS_CHAT, message_id=msg_id)
-    except Exception:
-        pass
+    for msg_id in (game.get("message_id"), game.get("photo_message_id")):
+        if not msg_id:
+            continue
+        try:
+            await bot.delete_message(chat_id=ANNOUNCEMENTS_CHAT, message_id=msg_id)
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
