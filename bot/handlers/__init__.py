@@ -12,6 +12,7 @@ from bot.handlers.manage import (
     EDIT_SELECT, EDIT_FIELD, EDIT_VALUE,
     delete_start, delete_select, delete_confirm,
     DELETE_SELECT, DELETE_CONFIRM,
+    available_games, my_games,
 )
 
 from bot.handlers.post import (

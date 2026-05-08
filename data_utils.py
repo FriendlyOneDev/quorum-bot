@@ -182,6 +182,19 @@ def get_games_by_creator(creator_id: int) -> List[Dict]:
         return [_row_to_game(row, conn) for row in rows]
 
 
+def get_games_by_player(player_id: int) -> List[Dict]:
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT {', '.join('g.' + c for c in _GAME_COLS)} "
+            f"FROM games g JOIN game_players gp ON g.game_id = gp.game_id "
+            f"WHERE gp.user_id = %s ORDER BY g.created_at",
+            (player_id,),
+        )
+        rows = cur.fetchall()
+        return [_row_to_game(row, conn) for row in rows]
+
+
 def add_player(game_id: str, player_id: int, used_slot: bool = False) -> bool:
     with get_conn() as conn:
         cur = conn.cursor()

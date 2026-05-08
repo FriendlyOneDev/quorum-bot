@@ -6,7 +6,7 @@ from telegram.ext import ContextTypes
 
 import data_utils
 from bot.config import ANNOUNCEMENTS_CHAT, ANNOUNCEMENTS_TOPIC
-from bot.handlers.common import format_game, resolve_player_names
+from bot.handlers.common import format_game, resolve_player_names, build_announcement_link_html
 from bot.handlers.decorators import ensure_user, require_private, require_gm
 from bot.keyboards import game_list_keyboard, join_leave_keyboard
 
@@ -302,23 +302,7 @@ async def _notify_creator(context, game, user, action):
     title = game["title"]
     msg_id = game.get("message_id")
     if msg_id and ANNOUNCEMENTS_CHAT:
-        # Build link based on announcements chat config
-        chat_str = str(ANNOUNCEMENTS_CHAT)
-        if chat_str.startswith("@"):
-            # Public group — use username
-            if ANNOUNCEMENTS_TOPIC:
-                title_link = f'<a href="https://t.me/{chat_str[1:]}/{ANNOUNCEMENTS_TOPIC}/{msg_id}">{title}</a>'
-            else:
-                title_link = f'<a href="https://t.me/{chat_str[1:]}/{msg_id}">{title}</a>'
-        else:
-            # Numeric chat ID
-            link_id = chat_str.lstrip("-")
-            if link_id.startswith("100"):
-                link_id = link_id[3:]
-            if ANNOUNCEMENTS_TOPIC:
-                title_link = f'<a href="https://t.me/c/{link_id}/{ANNOUNCEMENTS_TOPIC}/{msg_id}">{title}</a>'
-            else:
-                title_link = f'<a href="https://t.me/c/{link_id}/{msg_id}">{title}</a>'
+        title_link = build_announcement_link_html(msg_id, title)
     else:
         title_link = f"<b>{title}</b>"
 

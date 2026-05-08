@@ -22,6 +22,27 @@ def _format_game_date(game_date_str: str) -> str:
         return game_date_str
 
 
+def build_announcement_link_html(message_id, label: str) -> str:
+    """HTML <a> tag pointing at a posted announcement message.
+    Returns the bare label (no link) if message_id or ANNOUNCEMENTS_CHAT is missing."""
+    from bot.config import ANNOUNCEMENTS_CHAT, ANNOUNCEMENTS_TOPIC
+    if not (message_id and ANNOUNCEMENTS_CHAT):
+        return label
+    chat_str = str(ANNOUNCEMENTS_CHAT)
+    if chat_str.startswith("@"):
+        base = f"https://t.me/{chat_str[1:]}"
+    else:
+        link_id = chat_str.lstrip("-")
+        if link_id.startswith("100"):
+            link_id = link_id[3:]
+        base = f"https://t.me/c/{link_id}"
+    if ANNOUNCEMENTS_TOPIC:
+        url = f"{base}/{ANNOUNCEMENTS_TOPIC}/{message_id}"
+    else:
+        url = f"{base}/{message_id}"
+    return f'<a href="{url}">{label}</a>'
+
+
 def _get_gm_display_name(creator_id):
     """Get GM display name: custom_name → display_name → username."""
     user = data_utils.get_user(creator_id)
@@ -109,6 +130,8 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = ["<b>Доступні команди:</b>\n"]
 
     # Everyone
+    lines.append("/games — Список найближчих ігор")
+    lines.append("/mygames — Ігри, на які ви записані")
     lines.append("/myslots — Перевірити свої слоти")
     lines.append("/whoami — Ваша роль та слоти")
     lines.append("/help — Показати цю довідку")

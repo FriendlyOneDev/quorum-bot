@@ -45,6 +45,8 @@ from bot.handlers import (
     post_start, post_select,
     publish_now_callback, publish_skip_callback,
     join_game, leave_game,
+    # browse
+    available_games, my_games,
     # /rollcall
     rollcall_start, rollcall_select,
     # slots
@@ -231,6 +233,8 @@ if __name__ == "__main__":
     # Simple command handlers
     app.add_handler(CommandHandler("ping", ping))
     app.add_handler(CommandHandler("view", view_games))
+    app.add_handler(CommandHandler("games", available_games))
+    app.add_handler(CommandHandler("mygames", my_games))
     app.add_handler(CommandHandler("post", post_start))
     app.add_handler(CommandHandler("rollcall", rollcall_start))
     app.add_handler(CommandHandler("help", help_cmd))

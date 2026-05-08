@@ -5,7 +5,7 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
 import data_utils
-from bot.handlers.common import format_game
+from bot.handlers.common import format_game, build_announcement_link_html, _DAY_NAMES_UK
 from bot.handlers.decorators import ensure_user, require_private, require_gm
 from bot.handlers.post import update_posted_message, delete_posted_message
 
@@ -217,3 +217,68 @@ async def delete_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Гру не знайдено.")
 
     return ConversationHandler.END
+
+
+# ---------------------------------------------------------------------------
+# /games + /mygames — browse upcoming games
+# ---------------------------------------------------------------------------
+
+def _filter_and_sort_upcoming(games):
+    now = datetime.now(data_utils.TIMEZONE)
+    upcoming = []
+    for g in games:
+        if not g.get("message_id") or not g.get("game_date"):
+            continue
+        try:
+            dt = datetime.strptime(g["game_date"], "%Y-%m-%d %H:%M")
+        except ValueError:
+            continue
+        dt = dt.replace(tzinfo=data_utils.TIMEZONE)
+        if dt < now:
+            continue
+        upcoming.append((dt, g))
+    upcoming.sort(key=lambda x: x[0])
+    return upcoming
+
+
+def _format_browse_list(upcoming):
+    if not upcoming:
+        return None
+    lines = []
+    current_date = None
+    for dt, g in upcoming:
+        d = dt.date()
+        if d != current_date:
+            if lines:
+                lines.append("")
+            day_name = _DAY_NAMES_UK[dt.weekday()]
+            lines.append(f"<b>{day_name}, {dt.strftime('%d.%m')}</b>")
+            current_date = d
+        title = build_announcement_link_html(g["message_id"], g["title"])
+        time = dt.strftime("%H:%M")
+        location = g.get("location") or "—"
+        count = f"{len(g.get('players', []))}/{g['max_players']}"
+        lines.append(f"• {title} · {time} · {location} · {count}")
+    return "\n".join(lines)
+
+
+@ensure_user
+@require_private
+async def available_games(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    upcoming = _filter_and_sort_upcoming(data_utils.get_all_games())
+    text = _format_browse_list(upcoming) or "Найближчих ігор немає."
+    await update.message.reply_text(
+        text, parse_mode="HTML", disable_web_page_preview=True,
+    )
+
+
+@ensure_user
+@require_private
+async def my_games(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    upcoming = _filter_and_sort_upcoming(
+        data_utils.get_games_by_player(update.effective_user.id)
+    )
+    text = _format_browse_list(upcoming) or "Ви не записані на жодну з найближчих ігор."
+    await update.message.reply_text(
+        text, parse_mode="HTML", disable_web_page_preview=True,
+    )
