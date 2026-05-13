@@ -16,12 +16,10 @@ def game_list_keyboard(games, prefix):
 
 
 def join_leave_keyboard(game_id):
-    """Join/Leave buttons for a posted game message."""
+    """Signup toggle (row 1) + Interested (row 2) for a posted game message."""
     return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("Записатись", callback_data=f"join:{game_id}"),
-            InlineKeyboardButton("Відписатись", callback_data=f"leave:{game_id}"),
-        ]
+        [InlineKeyboardButton("Записатись / Відписатись", callback_data=f"signup:{game_id}")],
+        [InlineKeyboardButton("Зацікавлений", callback_data=f"interested:{game_id}")],
     ])
 
 

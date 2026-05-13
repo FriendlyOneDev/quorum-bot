@@ -278,33 +278,38 @@ async def delete_posted_message(bot, game):
 # Notify creator
 # ---------------------------------------------------------------------------
 
+async def _resolve_user_display(bot, user):
+    """Resolve a user mention string. Adds character tag/title in parens if available."""
+    display = f"@{user.username or user.full_name}"
+    if ANNOUNCEMENTS_CHAT:
+        try:
+            member = await bot.get_chat_member(ANNOUNCEMENTS_CHAT, user.id)
+            char_name = getattr(member, "tag", None) or getattr(member, "custom_title", None)
+            if char_name:
+                display = f"@{user.username or user.full_name}({char_name})"
+        except Exception:
+            pass
+    return f'<a href="tg://user?id={user.id}">{display}</a>'
+
+
+def _title_link(game):
+    title = game["title"]
+    msg_id = game.get("message_id")
+    if msg_id and ANNOUNCEMENTS_CHAT:
+        return build_announcement_link_html(msg_id, title)
+    return f"<b>{title}</b>"
+
+
 async def _notify_creator(context, game, user, action):
     """Send a DM to the game creator about a join/leave action."""
     creator_id = game.get("creator_id")
     if not creator_id:
         return
 
-    # Resolve tag (regular members) or custom_title (admins)
-    display = f"@{user.username or user.full_name}"
-    if ANNOUNCEMENTS_CHAT:
-        try:
-            member = await context.bot.get_chat_member(ANNOUNCEMENTS_CHAT, user.id)
-            char_name = getattr(member, "tag", None) or getattr(member, "custom_title", None)
-            if char_name:
-                display = f"@{user.username or user.full_name}({char_name})"
-        except Exception:
-            pass
-    user_mention = f'<a href="tg://user?id={user.id}">{display}</a>'
-
+    user_mention = await _resolve_user_display(context.bot, user)
     players = game.get("players", [])
     max_players = game["max_players"]
-
-    title = game["title"]
-    msg_id = game.get("message_id")
-    if msg_id and ANNOUNCEMENTS_CHAT:
-        title_link = build_announcement_link_html(msg_id, title)
-    else:
-        title_link = f"<b>{title}</b>"
+    title_link = _title_link(game)
 
     text = (
         f"{user_mention} {action} {title_link}\n"
@@ -320,12 +325,75 @@ async def _notify_creator(context, game, user, action):
         pass
 
 
+async def _notify_creator_interested(context, game, user):
+    """DM the GM that someone marked themselves interested in the game."""
+    creator_id = game.get("creator_id")
+    if not creator_id:
+        return
+
+    user_mention = await _resolve_user_display(context.bot, user)
+    title_link = _title_link(game)
+    interested_count = len(game.get("interested", []))
+
+    text = (
+        f"{user_mention} зацікавився(-лась) грою {title_link}\n"
+        f"<b>Зацікавлених:</b> {interested_count}"
+    )
+
+    try:
+        await context.bot.send_message(
+            chat_id=creator_id, text=text, parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+    except Exception:
+        pass
+
+
+async def _notify_interested_for_free_signup(bot, game):
+    """DM every interested user (who hasn't opted out) that signup is now free."""
+    title_link = _title_link(game)
+    text = (
+        f"Гра {title_link} починається менш ніж за 24 години. "
+        f"Реєстрація тепер безкоштовна (слот не списується)."
+    )
+
+    sent = 0
+    for uid in data_utils.get_interested_users(game["game_id"]):
+        user = data_utils.get_user(uid)
+        if not user or not user.get("notify_interested", True):
+            continue
+        try:
+            await bot.send_message(
+                chat_id=uid, text=text, parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+            sent += 1
+        except Exception:
+            pass
+    logger.info("24H_NOTIFY game=%s sent=%d", game["game_id"], sent)
+
+
+async def maybe_fire_24h_notifications(bot, game):
+    """If the game just crossed the 24h boundary, fire one-shot DMs to interested users."""
+    if game.get("interested_notified"):
+        return
+    if _is_game_started(game):
+        return
+    if not data_utils.is_within_24h(game):
+        return
+    # Atomic flip — only the call that flips actually sends DMs.
+    if not data_utils.mark_interested_notified(game["game_id"]):
+        return
+    await _notify_interested_for_free_signup(bot, game)
+
+
 # ---------------------------------------------------------------------------
-# Join / Leave callbacks
+# Signup toggle (merged join/leave) + Interested
 # ---------------------------------------------------------------------------
 
 @ensure_user
-async def join_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def signup_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Single handler for both join and leave — dispatches on current DB state."""
     query = update.callback_query
     game_id = query.data.split(":", 1)[1]
     game = data_utils.get_game(game_id)
@@ -341,22 +409,24 @@ async def join_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = update.effective_user.id
 
     if player_id in game["players"]:
-        await query.answer("Ви вже записані.")
-        return
+        await _do_leave(update, context, game, player_id)
+    else:
+        await _do_join(update, context, game, player_id)
+
+
+async def _do_join(update, context, game, player_id):
+    query = update.callback_query
+    game_id = game["game_id"]
 
     if len(game["players"]) >= game["max_players"]:
         await query.answer("Гра заповнена!", show_alert=True)
         return
 
-    # Slot check
     used_slot = False
     if data_utils.needs_slot(game, player_id):
         slots = data_utils.get_slots(player_id)
         if slots <= 0:
-            await query.answer(
-                "У вас немає слотів для запису.",
-                show_alert=True,
-            )
+            await query.answer("У вас немає слотів для запису.", show_alert=True)
             return
         data_utils.consume_slot(player_id)
         used_slot = True
@@ -373,34 +443,16 @@ async def join_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await _notify_creator(context, game, update.effective_user, "записався на")
 
 
-@ensure_user
-async def leave_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def _do_leave(update, context, game, player_id):
     query = update.callback_query
-    game_id = query.data.split(":", 1)[1]
-    game = data_utils.get_game(game_id)
+    game_id = game["game_id"]
 
-    if not game:
-        await query.answer("Ця гра більше не існує.", show_alert=True)
-        return
-
-    if _is_game_started(game):
-        await query.answer("Гра вже розпочалась.", show_alert=True)
-        return
-
-    player_id = update.effective_user.id
-
-    if player_id not in game["players"]:
-        await query.answer("Ви не записані на цю гру.")
-        return
-
-    # Check if player used a slot before removing
     players_info = data_utils.get_players_with_slots(game_id)
     player_used_slot = any(
         p["user_id"] == player_id and p["used_slot"] for p in players_info
     )
 
     data_utils.remove_player(game_id, player_id)
-
     if player_used_slot:
         data_utils.add_slots(player_id, 1)
 
@@ -413,6 +465,50 @@ async def leave_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer("Ви відписались.")
     await update_posted_message(context.bot, game, game_id)
     await _notify_creator(context, game, update.effective_user, "відписався від")
+
+
+# Back-compat: old posted messages still carry join:/leave: callbacks.
+# Both delegate to the new merged toggle.
+join_game = signup_toggle
+leave_game = signup_toggle
+
+
+@ensure_user
+async def interested_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Toggle the user's interest in a game."""
+    query = update.callback_query
+    game_id = query.data.split(":", 1)[1]
+    game = data_utils.get_game(game_id)
+
+    if not game:
+        await query.answer("Ця гра більше не існує.", show_alert=True)
+        return
+
+    if _is_game_started(game):
+        await query.answer("Гра вже розпочалась.", show_alert=True)
+        return
+
+    user_id = update.effective_user.id
+
+    if user_id in game.get("players", []):
+        await query.answer("Ви вже записані — кнопка «Зацікавлений» вам не потрібна.", show_alert=True)
+        return
+
+    if data_utils.is_interested(game_id, user_id):
+        data_utils.remove_interested(game_id, user_id)
+        logger.info("INTERESTED_REMOVE game=%s user=%s", game_id, user_id)
+        await query.answer("Прибрано з зацікавлених.")
+        notify_gm = False
+    else:
+        data_utils.add_interested(game_id, user_id)
+        logger.info("INTERESTED_ADD game=%s user=%s", game_id, user_id)
+        await query.answer("Додано до зацікавлених.")
+        notify_gm = True
+
+    game = data_utils.get_game(game_id)
+    await update_posted_message(context.bot, game, game_id)
+    if notify_gm:
+        await _notify_creator_interested(context, game, update.effective_user)
 
 
 # ---------------------------------------------------------------------------

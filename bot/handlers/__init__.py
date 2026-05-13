@@ -18,10 +18,11 @@ from bot.handlers.manage import (
 from bot.handlers.post import (
     post_start, post_select,
     publish_now_callback, publish_skip_callback,
-    join_game, leave_game,
+    join_game, leave_game, signup_toggle, interested_toggle,
+    maybe_fire_24h_notifications,
     rollcall_start, rollcall_select,
 )
 
 from bot.handlers.slots import giveslot, giveslots, myslots
-from bot.handlers.roles import setrole, setname, whoami, users_list
+from bot.handlers.roles import setrole, setname, whoami, users_list, toggle_notify
 from bot.handlers.register import register_start, register_callback

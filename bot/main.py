@@ -44,7 +44,8 @@ from bot.handlers import (
     # /post + join/leave + publish
     post_start, post_select,
     publish_now_callback, publish_skip_callback,
-    join_game, leave_game,
+    join_game, leave_game, signup_toggle, interested_toggle,
+    maybe_fire_24h_notifications,
     # browse
     available_games, my_games,
     # /rollcall
@@ -52,7 +53,7 @@ from bot.handlers import (
     # slots
     giveslot, giveslots, myslots,
     # roles
-    setrole, setname, whoami, users_list,
+    setrole, setname, whoami, users_list, toggle_notify,
     # register
     register_start, register_callback,
 )
@@ -77,6 +78,10 @@ async def _refresh_all_posts(bot):
                 refreshed += 1
             except Exception as e:
                 logger.warning("REFRESH failed game=%s: %s", game["game_id"], e)
+        try:
+            await maybe_fire_24h_notifications(bot, game)
+        except Exception as e:
+            logger.warning("24H_NOTIFY failed game=%s: %s", game["game_id"], e)
     logger.info("REFRESH cycle complete: %d games refreshed", refreshed)
 
 
@@ -250,6 +255,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("setname", setname))
     app.add_handler(CommandHandler("whoami", whoami))
     app.add_handler(CommandHandler("users", users_list))
+    app.add_handler(CommandHandler("togglenotify", toggle_notify))
 
     # Register command
     app.add_handler(CommandHandler("register", register_start))
@@ -259,6 +265,8 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(publish_now_callback, pattern=r"^publish_now:"))
     app.add_handler(CallbackQueryHandler(publish_skip_callback, pattern=r"^publish_skip$"))
     app.add_handler(CallbackQueryHandler(rollcall_select, pattern=r"^rollcall:"))
+    app.add_handler(CallbackQueryHandler(signup_toggle, pattern=r"^signup:"))
+    app.add_handler(CallbackQueryHandler(interested_toggle, pattern=r"^interested:"))
     app.add_handler(CallbackQueryHandler(join_game, pattern=r"^join:"))
     app.add_handler(CallbackQueryHandler(leave_game, pattern=r"^leave:"))
     app.add_handler(CallbackQueryHandler(register_callback, pattern=r"^register_me$"))

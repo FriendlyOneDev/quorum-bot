@@ -12,9 +12,12 @@ TIMEZONE = ZoneInfo(os.getenv("TIMEZONE", "Europe/Kyiv"))
 _GAME_COLS = (
     "game_id", "creator_id", "title", "description", "max_players",
     "created_at", "game_date", "location", "tone", "message_id", "photo_message_id",
-    "photo_id", "media_type", "autodelete",
+    "photo_id", "media_type", "autodelete", "interested_notified",
 )
-_USER_COLS = ("user_id", "username", "display_name", "custom_name", "role", "slots", "slots_week")
+_USER_COLS = (
+    "user_id", "username", "display_name", "custom_name", "role", "slots", "slots_week",
+    "notify_interested",
+)
 
 
 def _row_to_game(row, conn) -> Dict:
@@ -28,6 +31,12 @@ def _row_to_game(row, conn) -> Dict:
         (game["game_id"],),
     )
     game["players"] = [r[0] for r in cur.fetchall()]
+
+    cur.execute(
+        "SELECT user_id FROM game_interested WHERE game_id = %s ORDER BY marked_at",
+        (game["game_id"],),
+    )
+    game["interested"] = [r[0] for r in cur.fetchall()]
 
     cur.execute(
         "SELECT file_path FROM game_media WHERE game_id = %s ORDER BY id",
@@ -72,6 +81,7 @@ def create_game(creator_id: int, title: str, description: str, max_players: int,
         "description": description,
         "max_players": max_players,
         "players": [],
+        "interested": [],
         "created_at": created_at,
         "game_date": game_date,
         "location": location,
@@ -82,6 +92,7 @@ def create_game(creator_id: int, title: str, description: str, max_players: int,
         "photo_id": None,
         "media_type": None,
         "autodelete": autodelete,
+        "interested_notified": False,
     }
 
 
@@ -205,6 +216,11 @@ def add_player(game_id: str, player_id: int, used_slot: bool = False) -> bool:
             cur.execute(
                 "INSERT INTO game_players (game_id, user_id, used_slot) VALUES (%s, %s, %s)",
                 (game_id, player_id, used_slot),
+            )
+            # Joining supersedes interest — drop any matching interested row.
+            cur.execute(
+                "DELETE FROM game_interested WHERE game_id = %s AND user_id = %s",
+                (game_id, player_id),
             )
             return True
         except Exception:
@@ -413,22 +429,109 @@ def consume_slot(user_id: int) -> bool:
     return update_user(user_id, {"slots": current - 1})
 
 
+def is_within_24h(game: Dict) -> bool:
+    """True iff the game's start is less than 24 hours away (and parseable)."""
+    game_date_str = game.get("game_date")
+    if not game_date_str:
+        return False
+    try:
+        game_dt = datetime.strptime(game_date_str, "%Y-%m-%d %H:%M")
+    except ValueError:
+        return False
+    game_dt = game_dt.replace(tzinfo=TIMEZONE)
+    return (game_dt - datetime.now(TIMEZONE)).total_seconds() < 24 * 3600
+
+
 def needs_slot(game: Dict, user_id: int) -> bool:
     if has_gm_permission(user_id):
         return False
-
-    game_date_str = game.get("game_date")
-    if game_date_str:
-        try:
-            game_dt = datetime.strptime(game_date_str, "%Y-%m-%d %H:%M")
-            game_dt = game_dt.replace(tzinfo=TIMEZONE)
-            now = datetime.now(TIMEZONE)
-            if (game_dt - now).total_seconds() < 24 * 3600:
-                return False
-        except ValueError:
-            pass
-
+    if is_within_24h(game):
+        return False
     return True
+
+
+# ---------------------------------------------------------------------------
+# Interested
+# ---------------------------------------------------------------------------
+
+def add_interested(game_id: str, user_id: int) -> bool:
+    """Idempotent insert. Returns True if a new row was added, False if it already existed."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO game_interested (game_id, user_id) VALUES (%s, %s) "
+            "ON CONFLICT (game_id, user_id) DO NOTHING",
+            (game_id, user_id),
+        )
+        return cur.rowcount > 0
+
+
+def remove_interested(game_id: str, user_id: int) -> bool:
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM game_interested WHERE game_id = %s AND user_id = %s",
+            (game_id, user_id),
+        )
+        return cur.rowcount > 0
+
+
+def is_interested(game_id: str, user_id: int) -> bool:
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT 1 FROM game_interested WHERE game_id = %s AND user_id = %s",
+            (game_id, user_id),
+        )
+        return cur.fetchone() is not None
+
+
+def get_interested_users(game_id: str) -> List[int]:
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT user_id FROM game_interested WHERE game_id = %s ORDER BY marked_at",
+            (game_id,),
+        )
+        return [r[0] for r in cur.fetchall()]
+
+
+def get_games_user_interested_in(user_id: int) -> List[Dict]:
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT {', '.join('g.' + c for c in _GAME_COLS)} "
+            f"FROM games g JOIN game_interested gi ON g.game_id = gi.game_id "
+            f"WHERE gi.user_id = %s ORDER BY g.created_at",
+            (user_id,),
+        )
+        rows = cur.fetchall()
+        return [_row_to_game(row, conn) for row in rows]
+
+
+def toggle_notify_interested(user_id: int) -> bool:
+    """Flip the user's notify_interested flag and return the new value."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE users SET notify_interested = NOT notify_interested "
+            "WHERE user_id = %s RETURNING notify_interested",
+            (user_id,),
+        )
+        row = cur.fetchone()
+        return bool(row[0]) if row else False
+
+
+def mark_interested_notified(game_id: str) -> bool:
+    """Atomic: flip interested_notified from FALSE to TRUE. Returns True iff this call did the flip."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE games SET interested_notified = TRUE "
+            "WHERE game_id = %s AND interested_notified = FALSE",
+            (game_id,),
+        )
+        return cur.rowcount > 0
 
 
 # ---------------------------------------------------------------------------

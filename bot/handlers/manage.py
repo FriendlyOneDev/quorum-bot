@@ -258,6 +258,9 @@ def _format_browse_list(upcoming):
         time = dt.strftime("%H:%M")
         location = g.get("location") or "—"
         count = f"{len(g.get('players', []))}/{g['max_players']}"
+        interested_n = len(g.get("interested", []))
+        if interested_n:
+            count = f"{count} +{interested_n}"
         lines.append(f"• {title} · {time} · {location} · {count}")
     return "\n".join(lines)
 

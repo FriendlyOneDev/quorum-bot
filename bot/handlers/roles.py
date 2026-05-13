@@ -72,6 +72,22 @@ async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ---------------------------------------------------------------------------
+# /togglenotify — flip 24h auto-notification preference
+# ---------------------------------------------------------------------------
+
+@ensure_user
+@require_private
+async def toggle_notify(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    new_state = data_utils.toggle_notify_interested(update.effective_user.id)
+    msg = (
+        "Сповіщення про 24h увімкнено."
+        if new_state
+        else "Сповіщення про 24h вимкнено."
+    )
+    await update.message.reply_text(msg)
+
+
+# ---------------------------------------------------------------------------
 # /whoami
 # ---------------------------------------------------------------------------
 

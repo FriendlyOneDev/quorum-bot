@@ -74,6 +74,10 @@ def format_game(game, player_names=None):
     else:
         lines.append(f"<b>Гравці:</b> {len(players)}/{game['max_players']}")
 
+    interested = game.get("interested", [])
+    if interested:
+        lines.append(f"<b>Зацікавлені:</b> {len(interested)}")
+
     return "\n".join(lines)
 
 
@@ -134,6 +138,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append("/mygames — Ігри, на які ви записані")
     lines.append("/myslots — Перевірити свої слоти")
     lines.append("/whoami — Ваша роль та слоти")
+    lines.append("/togglenotify — Увімкнути/вимкнути сповіщення про 24h")
     lines.append("/help — Показати цю довідку")
     lines.append("/ping — Перевірка зв'язку")
 
