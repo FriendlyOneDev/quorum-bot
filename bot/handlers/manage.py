@@ -103,8 +103,13 @@ async def edit_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @ensure_user
 async def edit_value(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    field = context.user_data["edit_field"]
-    game_id = context.user_data["edit_game_id"]
+    field = context.user_data.get("edit_field")
+    game_id = context.user_data.get("edit_game_id")
+    if not field or not game_id:
+        # State was wiped (e.g. another conversation cleared user_data).
+        context.user_data.clear()
+        await update.message.reply_text("Сесія редагування скинулась. Почніть знову з /edit.")
+        return ConversationHandler.END
     text = update.message.text
     value = text
 
