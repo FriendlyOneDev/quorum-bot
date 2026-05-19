@@ -75,9 +75,12 @@ async def post_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text_msg, photo_msg = await _post_game_to_announcements(context.bot, game)
     if text_msg:
-        updates = {"message_id": text_msg.message_id}
-        if photo_msg:
-            updates["photo_message_id"] = photo_msg.message_id
+        updates = {
+            "message_id": text_msg.message_id,
+            # Always reset photo_message_id so a single-message repost
+            # doesn't inherit a stale split-mode pointer.
+            "photo_message_id": photo_msg.message_id if photo_msg else None,
+        }
         data_utils.update_game(game_id, updates)
         await query.edit_message_text("Гру опубліковано!")
     else:
@@ -195,9 +198,10 @@ async def publish_now_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     text_msg, photo_msg = await _post_game_to_announcements(context.bot, game)
     if text_msg:
-        updates = {"message_id": text_msg.message_id}
-        if photo_msg:
-            updates["photo_message_id"] = photo_msg.message_id
+        updates = {
+            "message_id": text_msg.message_id,
+            "photo_message_id": photo_msg.message_id if photo_msg else None,
+        }
         data_utils.update_game(game_id, updates)
         await query.edit_message_text("Гру опубліковано!")
     else:
