@@ -41,6 +41,9 @@ from bot.handlers import (
     # /delete
     delete_start, delete_select, delete_confirm,
     DELETE_SELECT, DELETE_CONFIRM,
+    # /kick
+    kick_start, kick_select_game, kick_select_player,
+    KICK_SELECT_GAME, KICK_SELECT_PLAYER,
     # /post + join/leave + publish
     post_start, post_select,
     publish_now_callback, publish_skip_callback,
@@ -231,9 +234,22 @@ if __name__ == "__main__":
         ],
     )
 
+    kick_conv = ConversationHandler(
+        entry_points=[CommandHandler("kick", kick_start)],
+        states={
+            KICK_SELECT_GAME: [CallbackQueryHandler(kick_select_game, pattern=r"^kick_game:")],
+            KICK_SELECT_PLAYER: [CallbackQueryHandler(kick_select_player, pattern=r"^kick_player:")],
+        },
+        fallbacks=[
+            CommandHandler("cancel", cancel),
+            CallbackQueryHandler(cancel, pattern=r"^cancel$"),
+        ],
+    )
+
     app.add_handler(create_conv)
     app.add_handler(edit_conv)
     app.add_handler(delete_conv)
+    app.add_handler(kick_conv)
 
     # Simple command handlers
     app.add_handler(CommandHandler("ping", ping))

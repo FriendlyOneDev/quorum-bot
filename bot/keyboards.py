@@ -73,6 +73,16 @@ def time_picker_keyboard(prefix="time"):
     return InlineKeyboardMarkup(buttons)
 
 
+def player_list_keyboard(player_ids, player_names):
+    """One button per player. callback_data = kick_player:{user_id}"""
+    buttons = [
+        [InlineKeyboardButton(player_names.get(pid, str(pid)), callback_data=f"kick_player:{pid}")]
+        for pid in player_ids
+    ]
+    buttons.append([InlineKeyboardButton("Скасувати", callback_data="cancel")])
+    return InlineKeyboardMarkup(buttons)
+
+
 def confirm_delete_keyboard(game_id):
     """Yes/No confirmation for deletion."""
     return InlineKeyboardMarkup([

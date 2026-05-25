@@ -5,16 +5,22 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
 import data_utils
-from bot.handlers.common import format_game, build_announcement_link_html, _DAY_NAMES_UK
+from bot.config import ANNOUNCEMENTS_CHAT
+from bot.handlers.common import (
+    format_game, build_announcement_link_html, _DAY_NAMES_UK, resolve_player_names,
+)
 from bot.handlers.decorators import ensure_user, require_private, require_gm
 from bot.handlers.post import update_posted_message, delete_posted_message
 
 logger = logging.getLogger(__name__)
-from bot.keyboards import game_list_keyboard, edit_field_keyboard, confirm_delete_keyboard
+from bot.keyboards import (
+    game_list_keyboard, edit_field_keyboard, confirm_delete_keyboard, player_list_keyboard,
+)
 
 # Conversation states
 EDIT_SELECT, EDIT_FIELD, EDIT_VALUE = range(6, 9)
 DELETE_SELECT, DELETE_CONFIRM = range(9, 11)
+KICK_SELECT_GAME, KICK_SELECT_PLAYER = range(11, 13)
 
 
 def _get_manageable_games(user_id):
@@ -290,3 +296,114 @@ async def my_games(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         text, parse_mode="HTML", disable_web_page_preview=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# /kick — GM removes a player from a game
+# ---------------------------------------------------------------------------
+
+@ensure_user
+@require_private
+@require_gm
+async def kick_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    games = _get_manageable_games(update.effective_user.id)
+    if not games:
+        await update.message.reply_text("У вас немає ігор.")
+        return ConversationHandler.END
+    await update.message.reply_text(
+        "Оберіть гру:",
+        reply_markup=game_list_keyboard(games, "kick_game"),
+    )
+    return KICK_SELECT_GAME
+
+
+@ensure_user
+async def kick_select_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    game_id = query.data.split(":", 1)[1]
+    game = data_utils.get_game(game_id)
+    if not game:
+        await query.edit_message_text("Гру не знайдено.")
+        return ConversationHandler.END
+    if not game.get("players"):
+        await query.edit_message_text("На цю гру ніхто не записаний.")
+        return ConversationHandler.END
+
+    context.user_data["kick_game_id"] = game_id
+    player_names = await resolve_player_names(
+        context.bot, ANNOUNCEMENTS_CHAT, game["players"],
+    )
+    await query.edit_message_text(
+        f"Кого зняти з <b>{game['title']}</b>?",
+        parse_mode="HTML",
+        reply_markup=player_list_keyboard(game["players"], player_names),
+    )
+    return KICK_SELECT_PLAYER
+
+
+@ensure_user
+async def kick_select_player(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    game_id = context.user_data.get("kick_game_id")
+    if not game_id:
+        context.user_data.clear()
+        await query.edit_message_text("Сесія скинулась. Почніть знову з /kick.")
+        return ConversationHandler.END
+
+    player_id = int(query.data.split(":", 1)[1])
+    game = data_utils.get_game(game_id)
+    if not game or player_id not in game.get("players", []):
+        await query.edit_message_text("Гравця вже немає в цій грі.")
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    # Refund slot if it was used.
+    players_info = data_utils.get_players_with_slots(game_id)
+    used_slot = any(p["user_id"] == player_id and p["used_slot"] for p in players_info)
+    data_utils.remove_player(game_id, player_id)
+    if used_slot:
+        data_utils.add_slots(player_id, 1)
+
+    game = data_utils.get_game(game_id)
+    logger.info(
+        "KICK game=%s user=%s by=%s refunded=%s",
+        game_id, player_id, update.effective_user.id, used_slot,
+    )
+
+    # Refresh the announcement post.
+    if game.get("message_id"):
+        await update_posted_message(context.bot, game, game_id)
+
+    # DM the kicked player.
+    msg_id = game.get("message_id")
+    title_link = (
+        build_announcement_link_html(msg_id, game["title"])
+        if msg_id else f"<b>{game['title']}</b>"
+    )
+    try:
+        await context.bot.send_message(
+            chat_id=player_id,
+            text=f"Ви були зняті з гри {title_link}.",
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
+    except Exception:
+        pass
+
+    # Confirm to the GM.
+    target_user = data_utils.get_user(player_id) or {}
+    name = (
+        target_user.get("display_name")
+        or target_user.get("username")
+        or str(player_id)
+    )
+    await query.edit_message_text(
+        f"Гравця {name} знято з гри <b>{game['title']}</b>.",
+        parse_mode="HTML",
+    )
+    context.user_data.clear()
+    return ConversationHandler.END

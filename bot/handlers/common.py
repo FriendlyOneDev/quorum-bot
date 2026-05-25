@@ -148,6 +148,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append("/view — Переглянути свої ігри")
         lines.append("/edit — Редагувати гру")
         lines.append("/delete — Видалити гру")
+        lines.append("/kick — Зняти гравця з гри")
         lines.append("/post — Опублікувати гру в групі")
         lines.append("/rollcall — Перекличка гравців")
         lines.append("/giveslot — Дати слот гравцю")

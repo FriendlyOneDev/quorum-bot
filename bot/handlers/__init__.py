@@ -13,6 +13,8 @@ from bot.handlers.manage import (
     delete_start, delete_select, delete_confirm,
     DELETE_SELECT, DELETE_CONFIRM,
     available_games, my_games,
+    kick_start, kick_select_game, kick_select_player,
+    KICK_SELECT_GAME, KICK_SELECT_PLAYER,
 )
 
 from bot.handlers.post import (
