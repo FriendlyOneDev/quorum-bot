@@ -56,7 +56,7 @@ from bot.handlers import (
     # slots
     giveslot, giveslots, myslots,
     # roles
-    setrole, setname, whoami, users_list, toggle_notify,
+    setrole, setname, whoami, users_list, toggle_notify, toggle_bypass,
     # register
     register_start, register_callback,
 )
@@ -272,6 +272,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("whoami", whoami))
     app.add_handler(CommandHandler("users", users_list))
     app.add_handler(CommandHandler("togglenotify", toggle_notify))
+    app.add_handler(CommandHandler("togglebypass", toggle_bypass))
 
     # Register command
     app.add_handler(CommandHandler("register", register_start))

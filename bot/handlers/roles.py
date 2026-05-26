@@ -3,6 +3,7 @@ from telegram.ext import ContextTypes
 
 import data_utils
 from bot.handlers.decorators import ensure_user, require_private, require_admin, require_gm
+
 from bot.handlers.post import update_posted_message
 
 
@@ -83,6 +84,23 @@ async def toggle_notify(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Сповіщення про 24h увімкнено."
         if new_state
         else "Сповіщення про 24h вимкнено."
+    )
+    await update.message.reply_text(msg)
+
+
+# ---------------------------------------------------------------------------
+# /togglebypass — admin-only: flip own slot-bypass flag
+# ---------------------------------------------------------------------------
+
+@ensure_user
+@require_private
+@require_admin
+async def toggle_bypass(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    new_state = data_utils.toggle_slot_bypass(update.effective_user.id)
+    msg = (
+        "Обхід слотів увімкнено — реєстрація безкоштовна."
+        if new_state
+        else "Обхід слотів вимкнено — реєстрація списує слот як у звичайних гравців."
     )
     await update.message.reply_text(msg)
 

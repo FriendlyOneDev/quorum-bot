@@ -16,7 +16,7 @@ _GAME_COLS = (
 )
 _USER_COLS = (
     "user_id", "username", "display_name", "custom_name", "role", "slots", "slots_week",
-    "notify_interested",
+    "notify_interested", "slot_bypass",
 )
 
 
@@ -443,11 +443,27 @@ def is_within_24h(game: Dict) -> bool:
 
 
 def needs_slot(game: Dict, user_id: int) -> bool:
-    if has_gm_permission(user_id):
+    # Per-user opt-out via slot_bypass (toggled by /togglebypass; admins
+    # start bypassed via migration 009 but can flip it off).
+    user = get_user(user_id)
+    if user and user.get("slot_bypass"):
         return False
     if is_within_24h(game):
         return False
     return True
+
+
+def toggle_slot_bypass(user_id: int) -> bool:
+    """Flip the user's slot_bypass flag and return the new value."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE users SET slot_bypass = NOT slot_bypass "
+            "WHERE user_id = %s RETURNING slot_bypass",
+            (user_id,),
+        )
+        row = cur.fetchone()
+        return bool(row[0]) if row else False
 
 
 # ---------------------------------------------------------------------------
