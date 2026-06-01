@@ -13,14 +13,18 @@ from bot.handlers.decorators import ensure_user, require_private, require_gm
 from bot.handlers.post import update_posted_message, delete_posted_message
 
 logger = logging.getLogger(__name__)
+from bot.handlers.post import notify_cancellation
 from bot.keyboards import (
     game_list_keyboard, edit_field_keyboard, confirm_delete_keyboard, player_list_keyboard,
+    confirm_cancel_keyboard,
 )
 
 # Conversation states
 EDIT_SELECT, EDIT_FIELD, EDIT_VALUE = range(6, 9)
 DELETE_SELECT, DELETE_CONFIRM = range(9, 11)
 KICK_SELECT_GAME, KICK_SELECT_PLAYER = range(11, 13)
+CANCEL_SELECT, CANCEL_CONFIRM = range(13, 15)
+UNCANCEL_SELECT = 15
 
 
 def _get_manageable_games(user_id):
@@ -28,6 +32,16 @@ def _get_manageable_games(user_id):
     if data_utils.is_admin(user_id):
         return data_utils.get_all_games()
     return data_utils.get_games_by_creator(user_id)
+
+
+def _get_cancellable_games(user_id):
+    """Manageable games that are NOT currently cancelled."""
+    return [g for g in _get_manageable_games(user_id) if not g.get("cancelled")]
+
+
+def _get_cancelled_games(user_id):
+    """Manageable games that ARE currently cancelled."""
+    return [g for g in _get_manageable_games(user_id) if g.get("cancelled")]
 
 
 # ---------------------------------------------------------------------------
@@ -238,6 +252,8 @@ def _filter_and_sort_upcoming(games):
     now = datetime.now(data_utils.TIMEZONE)
     upcoming = []
     for g in games:
+        if g.get("cancelled"):
+            continue
         if not g.get("message_id") or not g.get("game_date"):
             continue
         try:
@@ -406,4 +422,157 @@ async def kick_select_player(update: Update, context: ContextTypes.DEFAULT_TYPE)
         parse_mode="HTML",
     )
     context.user_data.clear()
+    return ConversationHandler.END
+
+
+# ---------------------------------------------------------------------------
+# /cancel — soft-cancel a game (keeps the announcement, disables signup)
+# ---------------------------------------------------------------------------
+
+@ensure_user
+@require_private
+@require_gm
+async def cancel_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    games = _get_cancellable_games(update.effective_user.id)
+    if not games:
+        await update.message.reply_text("У вас немає активних ігор для скасування.")
+        return ConversationHandler.END
+    await update.message.reply_text(
+        "Оберіть гру для скасування:",
+        reply_markup=game_list_keyboard(games, "cancel_sel"),
+    )
+    return CANCEL_SELECT
+
+
+@ensure_user
+async def cancel_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    game_id = query.data.split(":", 1)[1]
+    game = data_utils.get_game(game_id)
+    if not game:
+        await query.edit_message_text("Гру не знайдено.")
+        return ConversationHandler.END
+    if game.get("cancelled"):
+        await query.edit_message_text("Гру вже скасовано.")
+        return ConversationHandler.END
+
+    await query.edit_message_text(
+        f"Скасувати гру <b>{game['title']}</b>? "
+        f"Це поверне слоти, надішле сповіщення гравцям і зробить оголошення неактивним.",
+        parse_mode="HTML",
+        reply_markup=confirm_cancel_keyboard(game_id),
+    )
+    return CANCEL_CONFIRM
+
+
+@ensure_user
+async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data.startswith("cancel_no"):
+        await query.edit_message_text("Скасування відкладено.")
+        return ConversationHandler.END
+
+    game_id = query.data.split(":", 1)[1]
+    game = data_utils.get_game(game_id)
+    if not game:
+        await query.edit_message_text("Гру не знайдено.")
+        return ConversationHandler.END
+
+    # Capture the affected sets before clearing them.
+    players_info = data_utils.get_players_with_slots(game_id)
+    player_ids = [p["user_id"] for p in players_info]
+    interested_ids = data_utils.get_interested_users(game_id)
+
+    if not data_utils.cancel_game(game_id):
+        await query.edit_message_text("Гру вже скасовано.")
+        return ConversationHandler.END
+
+    # Refund slots for players who paid.
+    refunded = 0
+    for p in players_info:
+        if p["used_slot"]:
+            data_utils.add_slots(p["user_id"], 1)
+            refunded += 1
+
+    # Re-fetch with cancelled=True for the post update.
+    game = data_utils.get_game(game_id)
+
+    # Refresh the channel post (banner appears, buttons disappear).
+    if game.get("message_id"):
+        try:
+            await update_posted_message(context.bot, game, game_id)
+        except Exception as e:
+            logger.warning("CANCEL refresh failed game=%s: %s", game_id, e)
+
+    # DM the affected users.
+    notified_players = await notify_cancellation(context.bot, game, player_ids)
+    notified_interested = await notify_cancellation(context.bot, game, interested_ids)
+    notified = notified_players + notified_interested
+
+    # Clear the now-stale signup state.
+    data_utils.clear_players(game_id)
+    data_utils.clear_interested(game_id)
+
+    logger.info(
+        "CANCEL game=%s by user=%s refunded=%d notified=%d",
+        game_id, update.effective_user.id, refunded, notified,
+    )
+    await query.edit_message_text(
+        f"Гру скасовано. Повернуто {refunded} слотів, надіслано {notified} сповіщень."
+    )
+    return ConversationHandler.END
+
+
+# ---------------------------------------------------------------------------
+# /uncancel — restore a previously cancelled game
+# ---------------------------------------------------------------------------
+
+@ensure_user
+@require_private
+@require_gm
+async def uncancel_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    games = _get_cancelled_games(update.effective_user.id)
+    if not games:
+        await update.message.reply_text("У вас немає скасованих ігор.")
+        return ConversationHandler.END
+    await update.message.reply_text(
+        "Оберіть гру для відновлення:",
+        reply_markup=game_list_keyboard(games, "uncancel_sel"),
+    )
+    return UNCANCEL_SELECT
+
+
+@ensure_user
+async def uncancel_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    game_id = query.data.split(":", 1)[1]
+    game = data_utils.get_game(game_id)
+    if not game:
+        await query.edit_message_text("Гру не знайдено.")
+        return ConversationHandler.END
+    if not game.get("cancelled"):
+        await query.edit_message_text("Ця гра вже активна.")
+        return ConversationHandler.END
+
+    if not data_utils.uncancel_game(game_id):
+        await query.edit_message_text("Ця гра вже активна.")
+        return ConversationHandler.END
+
+    game = data_utils.get_game(game_id)
+    if game.get("message_id"):
+        try:
+            await update_posted_message(context.bot, game, game_id)
+        except Exception as e:
+            logger.warning("UNCANCEL refresh failed game=%s: %s", game_id, e)
+
+    logger.info("UNCANCEL game=%s by user=%s", game_id, update.effective_user.id)
+    await query.edit_message_text(
+        "Гру відновлено. Сповіщення гравцям не надсилались — оголосіть у каналі за бажанням."
+    )
     return ConversationHandler.END

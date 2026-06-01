@@ -44,6 +44,11 @@ from bot.handlers import (
     # /kick
     kick_start, kick_select_game, kick_select_player,
     KICK_SELECT_GAME, KICK_SELECT_PLAYER,
+    # /cancel + /uncancel
+    cancel_start, cancel_select, cancel_confirm,
+    CANCEL_SELECT, CANCEL_CONFIRM,
+    uncancel_start, uncancel_select,
+    UNCANCEL_SELECT,
     # /post + join/leave + publish
     post_start, post_select,
     publish_now_callback, publish_skip_callback,
@@ -246,10 +251,38 @@ if __name__ == "__main__":
         ],
     )
 
+    cancel_conv = ConversationHandler(
+        entry_points=[CommandHandler("cancel", cancel_start)],
+        states={
+            CANCEL_SELECT: [CallbackQueryHandler(cancel_select, pattern=r"^cancel_sel:")],
+            CANCEL_CONFIRM: [CallbackQueryHandler(cancel_confirm, pattern=r"^cancel_(yes|no)")],
+        },
+        fallbacks=[
+            # Typing /cancel again while inside the conversation aborts it via
+            # the common cancel handler. The CallbackQueryHandler covers any
+            # stray ^cancel$ button payloads.
+            CommandHandler("cancel", cancel),
+            CallbackQueryHandler(cancel, pattern=r"^cancel$"),
+        ],
+    )
+
+    uncancel_conv = ConversationHandler(
+        entry_points=[CommandHandler("uncancel", uncancel_start)],
+        states={
+            UNCANCEL_SELECT: [CallbackQueryHandler(uncancel_select, pattern=r"^uncancel_sel:")],
+        },
+        fallbacks=[
+            CommandHandler("cancel", cancel),
+            CallbackQueryHandler(cancel, pattern=r"^cancel$"),
+        ],
+    )
+
     app.add_handler(create_conv)
     app.add_handler(edit_conv)
     app.add_handler(delete_conv)
     app.add_handler(kick_conv)
+    app.add_handler(cancel_conv)
+    app.add_handler(uncancel_conv)
 
     # Simple command handlers
     app.add_handler(CommandHandler("ping", ping))

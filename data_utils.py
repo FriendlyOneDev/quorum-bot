@@ -12,7 +12,7 @@ TIMEZONE = ZoneInfo(os.getenv("TIMEZONE", "Europe/Kyiv"))
 _GAME_COLS = (
     "game_id", "creator_id", "title", "description", "max_players",
     "created_at", "game_date", "location", "tone", "message_id", "photo_message_id",
-    "photo_id", "media_type", "autodelete", "interested_notified",
+    "photo_id", "media_type", "autodelete", "interested_notified", "cancelled",
 )
 _USER_COLS = (
     "user_id", "username", "display_name", "custom_name", "role", "slots", "slots_week",
@@ -93,6 +93,7 @@ def create_game(creator_id: int, title: str, description: str, max_players: int,
         "media_type": None,
         "autodelete": autodelete,
         "interested_notified": False,
+        "cancelled": False,
     }
 
 
@@ -548,6 +549,48 @@ def mark_interested_notified(game_id: str) -> bool:
             (game_id,),
         )
         return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Cancellation
+# ---------------------------------------------------------------------------
+
+def cancel_game(game_id: str) -> bool:
+    """Atomic: flip cancelled from FALSE to TRUE. Returns True iff this call did the flip."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE games SET cancelled = TRUE "
+            "WHERE game_id = %s AND cancelled = FALSE",
+            (game_id,),
+        )
+        return cur.rowcount > 0
+
+
+def uncancel_game(game_id: str) -> bool:
+    """Atomic: flip cancelled from TRUE to FALSE. Returns True iff this call did the flip."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE games SET cancelled = FALSE "
+            "WHERE game_id = %s AND cancelled = TRUE",
+            (game_id,),
+        )
+        return cur.rowcount > 0
+
+
+def clear_players(game_id: str) -> int:
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM game_players WHERE game_id = %s", (game_id,))
+        return cur.rowcount
+
+
+def clear_interested(game_id: str) -> int:
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM game_interested WHERE game_id = %s", (game_id,))
+        return cur.rowcount
 
 
 # ---------------------------------------------------------------------------

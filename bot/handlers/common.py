@@ -54,11 +54,15 @@ def _get_gm_display_name(creator_id):
 def format_game(game, player_names=None):
     players = game.get("players", [])
     gm_name = _get_gm_display_name(game.get("creator_id"))
-    lines = [
+    lines = []
+    if game.get("cancelled"):
+        lines.append("<b>Гру скасовано</b>")
+        lines.append("")
+    lines.extend([
         f"<b>{game['title']}</b>",
         game["description"],
         "",
-    ]
+    ])
     if gm_name:
         lines.append(f"<b>ГМ:</b> {gm_name}")
     if game.get("location"):
@@ -148,6 +152,8 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append("/view — Переглянути свої ігри")
         lines.append("/edit — Редагувати гру")
         lines.append("/delete — Видалити гру")
+        lines.append("/cancel — Скасувати гру (зберігає оголошення)")
+        lines.append("/uncancel — Відновити скасовану гру")
         lines.append("/kick — Зняти гравця з гри")
         lines.append("/post — Опублікувати гру в групі")
         lines.append("/rollcall — Перекличка гравців")

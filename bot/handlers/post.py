@@ -27,7 +27,9 @@ def _is_game_started(game):
 
 
 def _keyboard_for(game, game_id):
-    """Return join/leave keyboard if game hasn't started, else None to hide buttons."""
+    """Return join/leave keyboard for an active game; None to hide buttons."""
+    if game.get("cancelled"):
+        return None
     if _is_game_started(game):
         return None
     return join_leave_keyboard(game_id)
@@ -379,6 +381,8 @@ async def _notify_interested_for_free_signup(bot, game):
 
 async def maybe_fire_24h_notifications(bot, game):
     """If the game just crossed the 24h boundary, fire one-shot DMs to interested users."""
+    if game.get("cancelled"):
+        return
     if game.get("interested_notified"):
         return
     if _is_game_started(game):
@@ -389,6 +393,23 @@ async def maybe_fire_24h_notifications(bot, game):
     if not data_utils.mark_interested_notified(game["game_id"]):
         return
     await _notify_interested_for_free_signup(bot, game)
+
+
+async def notify_cancellation(bot, game, recipient_ids):
+    """DM each recipient that the game was cancelled. Silent on per-user errors."""
+    title_link = _title_link(game)
+    text = f"Гра {title_link} скасована."
+    sent = 0
+    for uid in recipient_ids:
+        try:
+            await bot.send_message(
+                chat_id=uid, text=text, parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+            sent += 1
+        except Exception:
+            pass
+    return sent
 
 
 # ---------------------------------------------------------------------------
@@ -404,6 +425,10 @@ async def signup_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not game:
         await query.answer("Ця гра більше не існує.", show_alert=True)
+        return
+
+    if game.get("cancelled"):
+        await query.answer("Ця гра скасована.", show_alert=True)
         return
 
     if _is_game_started(game):
@@ -488,6 +513,10 @@ async def interested_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("Ця гра більше не існує.", show_alert=True)
         return
 
+    if game.get("cancelled"):
+        await query.answer("Ця гра скасована.", show_alert=True)
+        return
+
     if _is_game_started(game):
         await query.answer("Гра вже розпочалась.", show_alert=True)
         return
@@ -553,6 +582,10 @@ async def rollcall_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not game:
         await query.edit_message_text("Гру не знайдено.")
+        return
+
+    if game.get("cancelled"):
+        await query.edit_message_text("Ця гра скасована.")
         return
 
     players = game.get("players", [])

@@ -91,3 +91,13 @@ def confirm_delete_keyboard(game_id):
             InlineKeyboardButton("Ні, скасувати", callback_data="del_no"),
         ]
     ])
+
+
+def confirm_cancel_keyboard(game_id):
+    """Yes/No confirmation for soft-cancellation."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("Так, скасувати гру", callback_data=f"cancel_yes:{game_id}"),
+            InlineKeyboardButton("Ні, не скасовувати", callback_data="cancel_no"),
+        ]
+    ])

@@ -15,6 +15,10 @@ from bot.handlers.manage import (
     available_games, my_games,
     kick_start, kick_select_game, kick_select_player,
     KICK_SELECT_GAME, KICK_SELECT_PLAYER,
+    cancel_start, cancel_select, cancel_confirm,
+    CANCEL_SELECT, CANCEL_CONFIRM,
+    uncancel_start, uncancel_select,
+    UNCANCEL_SELECT,
 )
 
 from bot.handlers.post import (
