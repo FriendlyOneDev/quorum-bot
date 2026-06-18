@@ -69,6 +69,7 @@ async def view_games(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @require_private
 @require_gm
 async def edit_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
     games = _get_manageable_games(update.effective_user.id)
     if not games:
         await update.message.reply_text("У вас немає ігор для редагування.")
@@ -173,6 +174,7 @@ async def edit_value(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @require_private
 @require_gm
 async def delete_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
     games = _get_manageable_games(update.effective_user.id)
     if not games:
         await update.message.reply_text("У вас немає ігор для видалення.")
@@ -322,6 +324,7 @@ async def my_games(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @require_private
 @require_gm
 async def kick_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
     games = _get_manageable_games(update.effective_user.id)
     if not games:
         await update.message.reply_text("У вас немає ігор.")
@@ -433,6 +436,7 @@ async def kick_select_player(update: Update, context: ContextTypes.DEFAULT_TYPE)
 @require_private
 @require_gm
 async def cancel_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
     games = _get_cancellable_games(update.effective_user.id)
     if not games:
         await update.message.reply_text("У вас немає активних ігор для скасування.")
@@ -535,6 +539,7 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @require_private
 @require_gm
 async def uncancel_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
     games = _get_cancelled_games(update.effective_user.id)
     if not games:
         await update.message.reply_text("У вас немає скасованих ігор.")

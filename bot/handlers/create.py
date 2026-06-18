@@ -18,6 +18,7 @@ CREATE_TITLE, CREATE_DESC, CREATE_MAX, CREATE_LOCATION, CREATE_DATE, CREATE_TIME
 @require_private
 @require_gm
 async def create_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
     await update.message.reply_text("Введіть назву гри:")
     return CREATE_TITLE
 

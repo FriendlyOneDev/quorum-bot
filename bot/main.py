@@ -195,7 +195,9 @@ if __name__ == "__main__":
     # Error handler
     app.add_error_handler(error_handler)
 
-    # Conversation handlers
+    # Conversation handlers — allow_reentry=True lets the entry command restart
+    # the flow from scratch when the user is already mid-conversation (handles
+    # misclicks and "wait, I want to do that again" cases).
     create_conv = ConversationHandler(
         entry_points=[CommandHandler("create", create_start)],
         states={
@@ -212,6 +214,7 @@ if __name__ == "__main__":
             ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
+        allow_reentry=True,
     )
 
     edit_conv = ConversationHandler(
@@ -225,6 +228,7 @@ if __name__ == "__main__":
             CommandHandler("cancel", cancel),
             CallbackQueryHandler(cancel, pattern=r"^cancel$"),
         ],
+        allow_reentry=True,
     )
 
     delete_conv = ConversationHandler(
@@ -237,6 +241,7 @@ if __name__ == "__main__":
             CommandHandler("cancel", cancel),
             CallbackQueryHandler(cancel, pattern=r"^cancel$"),
         ],
+        allow_reentry=True,
     )
 
     kick_conv = ConversationHandler(
@@ -249,6 +254,7 @@ if __name__ == "__main__":
             CommandHandler("cancel", cancel),
             CallbackQueryHandler(cancel, pattern=r"^cancel$"),
         ],
+        allow_reentry=True,
     )
 
     cancel_conv = ConversationHandler(
@@ -275,6 +281,7 @@ if __name__ == "__main__":
             CommandHandler("cancel", cancel),
             CallbackQueryHandler(cancel, pattern=r"^cancel$"),
         ],
+        allow_reentry=True,
     )
 
     app.add_handler(create_conv)
