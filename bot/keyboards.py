@@ -32,6 +32,7 @@ def edit_field_keyboard():
         ("Місце", "location"),
         ("Дата", "game_date"),
         ("Тон", "tone"),
+        ("Протяжність", "duration"),
     ]
     buttons = [
         [InlineKeyboardButton(label, callback_data=f"edit_field:{field}")]

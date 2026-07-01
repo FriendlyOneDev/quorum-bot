@@ -71,6 +71,8 @@ def format_game(game, player_names=None):
         lines.append(f"<b>Дата:</b> {_format_game_date(game['game_date'])}")
     if game.get("tone"):
         lines.append(f"<b>Тон:</b> {game['tone']}")
+    if game.get("duration"):
+        lines.append(f"<b>Протяжність:</b> {game['duration']}")
 
     if player_names and players:
         names = ", ".join(player_names.get(pid, "?") for pid in players)

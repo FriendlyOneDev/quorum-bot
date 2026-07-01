@@ -11,7 +11,7 @@ from bot.keyboards import date_picker_keyboard, time_picker_keyboard
 logger = logging.getLogger(__name__)
 
 # Conversation states
-CREATE_TITLE, CREATE_DESC, CREATE_MAX, CREATE_LOCATION, CREATE_DATE, CREATE_TIME, CREATE_TONE, CREATE_IMAGE = range(8)
+CREATE_TITLE, CREATE_DESC, CREATE_MAX, CREATE_LOCATION, CREATE_DATE, CREATE_TIME, CREATE_TONE, CREATE_DURATION, CREATE_IMAGE = range(9)
 
 
 @ensure_user
@@ -102,6 +102,16 @@ async def create_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @ensure_user
 async def create_tone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["create_tone"] = update.message.text
+    await update.message.reply_text(
+        "Введіть протяжність гри (наприклад: 1 сесія 4 год, або 2 сесії), або /skip:"
+    )
+    return CREATE_DURATION
+
+
+@ensure_user
+async def create_duration(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text or ""
+    context.user_data["create_duration"] = None if text.startswith("/skip") else text
     await update.message.reply_text("Надішліть фото або GIF для гри, або /skip:")
     return CREATE_IMAGE
 
@@ -128,6 +138,7 @@ async def _finish_create(reply_target, context):
         game_date=context.user_data.get("create_game_date"),
         location=context.user_data.get("create_location"),
         tone=context.user_data.get("create_tone"),
+        duration=context.user_data.get("create_duration"),
     )
     if photo_id:
         data_utils.update_game(game["game_id"], {"photo_id": photo_id, "media_type": media_type})

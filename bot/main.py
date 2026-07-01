@@ -31,8 +31,8 @@ from bot.handlers import (
     help_cmd,
     # /create
     create_start, create_title, create_desc, create_max, create_location,
-    create_date, create_time, create_tone, create_image,
-    CREATE_TITLE, CREATE_DESC, CREATE_MAX, CREATE_LOCATION, CREATE_DATE, CREATE_TIME, CREATE_TONE, CREATE_IMAGE,
+    create_date, create_time, create_tone, create_duration, create_image,
+    CREATE_TITLE, CREATE_DESC, CREATE_MAX, CREATE_LOCATION, CREATE_DATE, CREATE_TIME, CREATE_TONE, CREATE_DURATION, CREATE_IMAGE,
     # /view
     view_games,
     # /edit
@@ -208,6 +208,10 @@ if __name__ == "__main__":
             CREATE_DATE: [CallbackQueryHandler(create_date, pattern=r"^cal:")],
             CREATE_TIME: [CallbackQueryHandler(create_time, pattern=r"^time:")],
             CREATE_TONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_tone)],
+            CREATE_DURATION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, create_duration),
+                CommandHandler("skip", create_duration),
+            ],
             CREATE_IMAGE: [
                 MessageHandler(filters.PHOTO | filters.ANIMATION, create_image),
                 CommandHandler("skip", create_image),
