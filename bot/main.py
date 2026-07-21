@@ -12,6 +12,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram").setLevel(logging.WARNING)
 
 from telegram.ext import (
+    AIORateLimiter,
     ApplicationBuilder,
     CommandHandler,
     CallbackQueryHandler,
@@ -188,6 +189,7 @@ if __name__ == "__main__":
         ApplicationBuilder()
         .token(api_key)
         .request(request)
+        .rate_limiter(AIORateLimiter())
         .post_init(on_startup)
         .build()
     )
