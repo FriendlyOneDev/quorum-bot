@@ -13,6 +13,7 @@ _GAME_COLS = (
     "game_id", "creator_id", "title", "description", "max_players",
     "created_at", "game_date", "location", "tone", "duration",
     "message_id", "photo_message_id",
+    "message_id_academy", "photo_message_id_academy",
     "photo_id", "media_type", "autodelete", "interested_notified", "cancelled",
 )
 _USER_COLS = (
@@ -93,6 +94,8 @@ def create_game(creator_id: int, title: str, description: str, max_players: int,
         "media_files": [],
         "message_id": message_id,
         "photo_message_id": None,
+        "message_id_academy": None,
+        "photo_message_id_academy": None,
         "photo_id": None,
         "media_type": None,
         "autodelete": autodelete,

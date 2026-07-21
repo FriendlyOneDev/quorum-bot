@@ -5,7 +5,7 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
 import data_utils
-from bot.config import ANNOUNCEMENTS_CHAT
+from bot.config import MAIN_CHANNEL
 from bot.handlers.common import (
     format_game, build_announcement_link_html, _DAY_NAMES_UK, resolve_player_names,
 )
@@ -353,7 +353,7 @@ async def kick_select_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["kick_game_id"] = game_id
     player_names = await resolve_player_names(
-        context.bot, ANNOUNCEMENTS_CHAT, game["players"],
+        context.bot, MAIN_CHANNEL["chat_id"], game["players"],
     )
     await query.edit_message_text(
         f"Кого зняти з <b>{game['title']}</b>?",

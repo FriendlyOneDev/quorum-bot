@@ -1,11 +1,13 @@
+import asyncio
 import logging
 from datetime import datetime
 
 from telegram import Update
+from telegram.error import RetryAfter
 from telegram.ext import ContextTypes
 
 import data_utils
-from bot.config import ANNOUNCEMENTS_CHAT, ANNOUNCEMENTS_TOPIC
+from bot.config import CHANNELS, MAIN_CHANNEL
 from bot.handlers.common import format_game, resolve_player_names, build_announcement_link_html
 from bot.handlers.decorators import ensure_user, require_private, require_gm
 from bot.keyboards import game_list_keyboard, join_leave_keyboard
@@ -75,33 +77,72 @@ async def post_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Гру не знайдено.")
         return
 
-    text_msg, photo_msg = await _post_game_to_announcements(context.bot, game)
-    if text_msg:
-        updates = {
-            "message_id": text_msg.message_id,
-            # Always reset photo_message_id so a single-message repost
-            # doesn't inherit a stale split-mode pointer.
-            "photo_message_id": photo_msg.message_id if photo_msg else None,
-        }
+    updates = await _post_game_to_announcements(context.bot, game)
+    if updates:
         data_utils.update_game(game_id, updates)
         await query.edit_message_text("Гру опубліковано!")
     else:
-        await query.edit_message_text("Не вдалося опублікувати. Перевірте налаштування каналу.")
+        await query.edit_message_text(
+            "Не вдалося опублікувати. Спробуйте пізніше через /post."
+        )
 
 
 CAPTION_LIMIT = 1024
 
 
+async def _send_to_channel(bot, game, text, keyboard, channel):
+    """Send the game post to a single channel. Returns (text_msg, photo_msg), or raises."""
+    chat_id = channel["chat_id"]
+    topic_id = channel["topic_id"]
+
+    has_media = bool(game.get("photo_id"))
+    is_animation = game.get("media_type") == "animation"
+    needs_split = has_media and len(text) > CAPTION_LIMIT
+
+    if not has_media:
+        sent = await bot.send_message(
+            chat_id=chat_id, text=text, parse_mode="HTML",
+            reply_markup=keyboard, message_thread_id=topic_id,
+        )
+        return sent, None
+
+    if needs_split:
+        send_media = bot.send_animation if is_animation else bot.send_photo
+        media_arg = "animation" if is_animation else "photo"
+        photo_msg = await send_media(
+            chat_id=chat_id, **{media_arg: game["photo_id"]},
+            message_thread_id=topic_id,
+        )
+        text_msg = await bot.send_message(
+            chat_id=chat_id, text=text, parse_mode="HTML",
+            reply_markup=keyboard, message_thread_id=topic_id,
+        )
+        return text_msg, photo_msg
+
+    # Caption fits — single message
+    if is_animation:
+        sent = await bot.send_animation(
+            chat_id=chat_id, animation=game["photo_id"], caption=text,
+            parse_mode="HTML", reply_markup=keyboard, message_thread_id=topic_id,
+        )
+    else:
+        sent = await bot.send_photo(
+            chat_id=chat_id, photo=game["photo_id"], caption=text,
+            parse_mode="HTML", reply_markup=keyboard, message_thread_id=topic_id,
+        )
+    return sent, None
+
+
 async def _post_game_to_announcements(bot, game):
-    """Post a game to the configured announcements channel.
+    """Post a game to every configured channel (mirror).
 
-    Returns a tuple (text_msg, photo_msg) where photo_msg is None if media is in caption.
-    Returns (None, None) on failure.
+    Returns a dict of column-name → id updates suitable for update_game(),
+    or None if EVERY channel failed. Partial success is still returned.
     """
-    if not ANNOUNCEMENTS_CHAT:
-        return None, None
+    if not CHANNELS or not CHANNELS[0]["chat_id"]:
+        return None
 
-    player_names = await resolve_player_names(bot, ANNOUNCEMENTS_CHAT, game.get("players", []))
+    player_names = await resolve_player_names(bot, MAIN_CHANNEL["chat_id"], game.get("players", []))
     text = format_game(game, player_names)
     keyboard = _keyboard_for(game, game["game_id"])
     logger.info(
@@ -110,63 +151,39 @@ async def _post_game_to_announcements(bot, game):
         game["max_players"], _is_game_started(game),
     )
 
-    has_media = bool(game.get("photo_id"))
-    is_animation = game.get("media_type") == "animation"
-    needs_split = has_media and len(text) > CAPTION_LIMIT
+    updates = {}
+    any_success = False
+    for channel in CHANNELS:
+        if not channel["chat_id"]:
+            continue
+        for attempt in range(2):
+            try:
+                text_msg, photo_msg = await _send_to_channel(bot, game, text, keyboard, channel)
+                # Always write both columns so a repost doesn't inherit a stale split-mode pointer.
+                updates[channel["msg_col"]] = text_msg.message_id
+                updates[channel["photo_col"]] = photo_msg.message_id if photo_msg else None
+                any_success = True
+                break
+            except RetryAfter as e:
+                wait = e.retry_after + 1
+                logger.warning(
+                    "POST rate-limited game=%s channel=%s wait=%ds attempt=%d",
+                    game["game_id"], channel["chat_id"], wait, attempt + 1,
+                )
+                if attempt == 0:
+                    await asyncio.sleep(wait)
+                    continue
+                await _notify_admin_post_failure(bot, game, e)
+                break
+            except Exception as e:
+                logger.error(
+                    "POST failed game=%s channel=%s: %s",
+                    game["game_id"], channel["chat_id"], e, exc_info=True,
+                )
+                await _notify_admin_post_failure(bot, game, e)
+                break
 
-    try:
-        if not has_media:
-            sent = await bot.send_message(
-                chat_id=ANNOUNCEMENTS_CHAT,
-                text=text,
-                parse_mode="HTML",
-                reply_markup=keyboard,
-                message_thread_id=ANNOUNCEMENTS_TOPIC,
-            )
-            return sent, None
-
-        if needs_split:
-            # Send photo first (no caption, no buttons), then text with buttons
-            send_media = bot.send_animation if is_animation else bot.send_photo
-            media_arg = "animation" if is_animation else "photo"
-            photo_msg = await send_media(
-                chat_id=ANNOUNCEMENTS_CHAT,
-                **{media_arg: game["photo_id"]},
-                message_thread_id=ANNOUNCEMENTS_TOPIC,
-            )
-            text_msg = await bot.send_message(
-                chat_id=ANNOUNCEMENTS_CHAT,
-                text=text,
-                parse_mode="HTML",
-                reply_markup=keyboard,
-                message_thread_id=ANNOUNCEMENTS_TOPIC,
-            )
-            return text_msg, photo_msg
-
-        # Caption fits — single message
-        if is_animation:
-            sent = await bot.send_animation(
-                chat_id=ANNOUNCEMENTS_CHAT,
-                animation=game["photo_id"],
-                caption=text,
-                parse_mode="HTML",
-                reply_markup=keyboard,
-                message_thread_id=ANNOUNCEMENTS_TOPIC,
-            )
-        else:
-            sent = await bot.send_photo(
-                chat_id=ANNOUNCEMENTS_CHAT,
-                photo=game["photo_id"],
-                caption=text,
-                parse_mode="HTML",
-                reply_markup=keyboard,
-                message_thread_id=ANNOUNCEMENTS_TOPIC,
-            )
-        return sent, None
-    except Exception as e:
-        logger.error("POST failed game=%s: %s", game["game_id"], e, exc_info=True)
-        await _notify_admin_post_failure(bot, game, e)
-        return None, None
+    return updates if any_success else None
 
 
 async def _notify_admin_post_failure(bot, game, err):
@@ -198,16 +215,14 @@ async def publish_now_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text("Гру не знайдено.")
         return
 
-    text_msg, photo_msg = await _post_game_to_announcements(context.bot, game)
-    if text_msg:
-        updates = {
-            "message_id": text_msg.message_id,
-            "photo_message_id": photo_msg.message_id if photo_msg else None,
-        }
+    updates = await _post_game_to_announcements(context.bot, game)
+    if updates:
         data_utils.update_game(game_id, updates)
         await query.edit_message_text("Гру опубліковано!")
     else:
-        await query.edit_message_text("Не вдалося опублікувати. Перевірте налаштування каналу.")
+        await query.edit_message_text(
+            "Не вдалося опублікувати. Спробуйте пізніше через /post."
+        )
 
 
 @ensure_user
@@ -222,45 +237,49 @@ async def publish_skip_callback(update: Update, context: ContextTypes.DEFAULT_TY
 # ---------------------------------------------------------------------------
 
 async def update_posted_message(bot, game, game_id):
-    """Update the posted game message in announcements channel."""
-    msg_id = game.get("message_id")
-    if not msg_id or not ANNOUNCEMENTS_CHAT:
+    """Update the posted game message in every configured announcements channel."""
+    # Nothing to update if the game isn't posted anywhere.
+    if not any(game.get(ch["msg_col"]) for ch in CHANNELS):
         return
 
-    player_names = await resolve_player_names(bot, ANNOUNCEMENTS_CHAT, game.get("players", []))
+    player_names = await resolve_player_names(
+        bot, MAIN_CHANNEL["chat_id"], game.get("players", []),
+    )
     text = format_game(game, player_names)
     keyboard = _keyboard_for(game, game_id)
     logger.info(
-        "UPDATE game=%s msg_id=%s players=%d/%d started=%s",
-        game_id, msg_id, len(game.get("players", [])),
+        "UPDATE game=%s players=%d/%d started=%s",
+        game_id, len(game.get("players", [])),
         game["max_players"], _is_game_started(game),
     )
 
-    # If photo is in a separate message, the main msg_id is plain text → use edit_message_text.
-    # Otherwise, caption is part of the photo message → use edit_message_caption.
-    is_caption = bool(game.get("photo_id")) and not game.get("photo_message_id")
+    has_media = bool(game.get("photo_id"))
 
-    try:
-        if is_caption:
-            await bot.edit_message_caption(
-                chat_id=ANNOUNCEMENTS_CHAT,
-                message_id=msg_id,
-                caption=text,
-                parse_mode="HTML",
-                reply_markup=keyboard,
-            )
-        else:
-            await bot.edit_message_text(
-                chat_id=ANNOUNCEMENTS_CHAT,
-                message_id=msg_id,
-                text=text,
-                parse_mode="HTML",
-                reply_markup=keyboard,
-            )
-    except Exception as e:
-        # "Message is not modified" is benign — caused by no actual change
-        if "not modified" not in str(e).lower():
-            logger.warning("UPDATE failed game=%s msg_id=%s: %s", game_id, msg_id, e)
+    for channel in CHANNELS:
+        msg_id = game.get(channel["msg_col"])
+        if not msg_id or not channel["chat_id"]:
+            continue
+        # If media exists AND this channel has no separate photo msg_id, the main msg is
+        # a photo+caption message — edit the caption. Otherwise it's plain text.
+        is_caption = has_media and not game.get(channel["photo_col"])
+        try:
+            if is_caption:
+                await bot.edit_message_caption(
+                    chat_id=channel["chat_id"], message_id=msg_id,
+                    caption=text, parse_mode="HTML", reply_markup=keyboard,
+                )
+            else:
+                await bot.edit_message_text(
+                    chat_id=channel["chat_id"], message_id=msg_id,
+                    text=text, parse_mode="HTML", reply_markup=keyboard,
+                )
+        except Exception as e:
+            # "Message is not modified" is benign — caused by no actual change.
+            if "not modified" not in str(e).lower():
+                logger.warning(
+                    "UPDATE failed game=%s channel=%s msg_id=%s: %s",
+                    game_id, channel["chat_id"], msg_id, e,
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -268,16 +287,17 @@ async def update_posted_message(bot, game, game_id):
 # ---------------------------------------------------------------------------
 
 async def delete_posted_message(bot, game):
-    """Delete the posted game message(s) from announcements channel."""
-    if not ANNOUNCEMENTS_CHAT:
-        return
-    for msg_id in (game.get("message_id"), game.get("photo_message_id")):
-        if not msg_id:
+    """Delete the posted game message(s) from every configured announcements channel."""
+    for channel in CHANNELS:
+        if not channel["chat_id"]:
             continue
-        try:
-            await bot.delete_message(chat_id=ANNOUNCEMENTS_CHAT, message_id=msg_id)
-        except Exception:
-            pass
+        for msg_id in (game.get(channel["msg_col"]), game.get(channel["photo_col"])):
+            if not msg_id:
+                continue
+            try:
+                await bot.delete_message(chat_id=channel["chat_id"], message_id=msg_id)
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -287,9 +307,9 @@ async def delete_posted_message(bot, game):
 async def _resolve_user_display(bot, user):
     """Resolve a user mention string. Adds character tag/title in parens if available."""
     display = f"@{user.username or user.full_name}"
-    if ANNOUNCEMENTS_CHAT:
+    if MAIN_CHANNEL["chat_id"]:
         try:
-            member = await bot.get_chat_member(ANNOUNCEMENTS_CHAT, user.id)
+            member = await bot.get_chat_member(MAIN_CHANNEL["chat_id"], user.id)
             char_name = getattr(member, "tag", None) or getattr(member, "custom_title", None)
             if char_name:
                 display = f"@{user.username or user.full_name}({char_name})"
@@ -301,7 +321,7 @@ async def _resolve_user_display(bot, user):
 def _title_link(game):
     title = game["title"]
     msg_id = game.get("message_id")
-    if msg_id and ANNOUNCEMENTS_CHAT:
+    if msg_id and MAIN_CHANNEL["chat_id"]:
         return build_announcement_link_html(msg_id, title)
     return f"<b>{title}</b>"
 
@@ -597,7 +617,7 @@ async def rollcall_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Build mentions: prefer @username (triggers notifications), fallback to text_mention
-    name_chat = ANNOUNCEMENTS_CHAT or query.message.chat.id
+    name_chat = MAIN_CHANNEL["chat_id"] or query.message.chat.id
     player_names = await resolve_player_names(context.bot, name_chat, players)
 
     mention_parts = []

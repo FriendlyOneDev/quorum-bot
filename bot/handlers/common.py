@@ -23,12 +23,14 @@ def _format_game_date(game_date_str: str) -> str:
 
 
 def build_announcement_link_html(message_id, label: str) -> str:
-    """HTML <a> tag pointing at a posted announcement message.
-    Returns the bare label (no link) if message_id or ANNOUNCEMENTS_CHAT is missing."""
-    from bot.config import ANNOUNCEMENTS_CHAT, ANNOUNCEMENTS_TOPIC
-    if not (message_id and ANNOUNCEMENTS_CHAT):
+    """HTML <a> tag pointing at the MAIN channel's post for this game.
+    Returns the bare label (no link) if message_id or the main channel is missing."""
+    from bot.config import MAIN_CHANNEL
+    chat_id = MAIN_CHANNEL["chat_id"]
+    topic_id = MAIN_CHANNEL["topic_id"]
+    if not (message_id and chat_id):
         return label
-    chat_str = str(ANNOUNCEMENTS_CHAT)
+    chat_str = str(chat_id)
     if chat_str.startswith("@"):
         base = f"https://t.me/{chat_str[1:]}"
     else:
@@ -36,8 +38,8 @@ def build_announcement_link_html(message_id, label: str) -> str:
         if link_id.startswith("100"):
             link_id = link_id[3:]
         base = f"https://t.me/c/{link_id}"
-    if ANNOUNCEMENTS_TOPIC:
-        url = f"{base}/{ANNOUNCEMENTS_TOPIC}/{message_id}"
+    if topic_id:
+        url = f"{base}/{topic_id}/{message_id}"
     else:
         url = f"{base}/{message_id}"
     return f'<a href="{url}">{label}</a>'
