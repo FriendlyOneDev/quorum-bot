@@ -78,19 +78,25 @@ logger = logging.getLogger(__name__)
 
 async def _refresh_all_posts(bot):
     from bot.handlers.post import update_posted_message
-    games = data_utils.get_all_games()
+    # Snapshot only game_ids; re-fetch each game just before rendering so
+    # concurrent /cancel, /edit, join/leave etc. that landed after the snapshot
+    # are honored instead of overwritten with stale state.
+    game_ids = [g["game_id"] for g in data_utils.get_all_games()]
     refreshed = 0
-    for game in games:
+    for game_id in game_ids:
+        game = data_utils.get_game(game_id)
+        if not game:
+            continue
         if game.get("message_id"):
             try:
-                await update_posted_message(bot, game, game["game_id"])
+                await update_posted_message(bot, game, game_id)
                 refreshed += 1
             except Exception as e:
-                logger.warning("REFRESH failed game=%s: %s", game["game_id"], e)
+                logger.warning("REFRESH failed game=%s: %s", game_id, e)
         try:
             await maybe_fire_24h_notifications(bot, game)
         except Exception as e:
-            logger.warning("24H_NOTIFY failed game=%s: %s", game["game_id"], e)
+            logger.warning("24H_NOTIFY failed game=%s: %s", game_id, e)
     logger.info("REFRESH cycle complete: %d games refreshed", refreshed)
 
 
