@@ -236,6 +236,35 @@ async def publish_skip_callback(update: Update, context: ContextTypes.DEFAULT_TY
 # Update posted message (used after join/leave/edit)
 # ---------------------------------------------------------------------------
 
+async def _migrate_caption_to_split(bot, game, channel, old_caption_msg_id, text, keyboard):
+    """Repost as split (photo + text) and clean up the old caption message.
+
+    Send the new pair first, then delete the old — so if the send fails we
+    haven't left a hole. Returns {msg_col: new_text_id, photo_col: new_photo_id}."""
+    chat_id = channel["chat_id"]
+    topic_id = channel["topic_id"]
+    is_animation = game.get("media_type") == "animation"
+    send_media = bot.send_animation if is_animation else bot.send_photo
+    media_arg = "animation" if is_animation else "photo"
+
+    photo_msg = await send_media(
+        chat_id=chat_id, **{media_arg: game["photo_id"]},
+        message_thread_id=topic_id,
+    )
+    text_msg = await bot.send_message(
+        chat_id=chat_id, text=text, parse_mode="HTML",
+        reply_markup=keyboard, message_thread_id=topic_id,
+    )
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=old_caption_msg_id)
+    except Exception as e:
+        logger.warning(
+            "MIGRATE delete-old failed channel=%s msg=%s: %s",
+            chat_id, old_caption_msg_id, e,
+        )
+    return {channel["msg_col"]: text_msg.message_id, channel["photo_col"]: photo_msg.message_id}
+
+
 async def update_posted_message(bot, game, game_id):
     """Update the posted game message in every configured announcements channel."""
     # Nothing to update if the game isn't posted anywhere.
@@ -254,6 +283,7 @@ async def update_posted_message(bot, game, game_id):
     )
 
     has_media = bool(game.get("photo_id"))
+    updates = {}
 
     for channel in CHANNELS:
         msg_id = game.get(channel["msg_col"])
@@ -274,12 +304,35 @@ async def update_posted_message(bot, game, game_id):
                     text=text, parse_mode="HTML", reply_markup=keyboard,
                 )
         except Exception as e:
-            # "Message is not modified" is benign — caused by no actual change.
-            if "not modified" not in str(e).lower():
-                logger.warning(
-                    "UPDATE failed game=%s channel=%s msg_id=%s: %s",
-                    game_id, channel["chat_id"], msg_id, e,
-                )
+            err = str(e).lower()
+            if "not modified" in err:
+                continue
+            # Caption grew past Telegram's 1024-char limit — migrate this channel
+            # from caption mode to split mode (photo + separate text message).
+            if is_caption and "caption" in err and ("too long" in err or "too_long" in err):
+                try:
+                    ch_updates = await _migrate_caption_to_split(
+                        bot, game, channel, msg_id, text, keyboard,
+                    )
+                    updates.update(ch_updates)
+                    logger.info(
+                        "MIGRATE game=%s channel=%s caption->split new_msg=%s new_photo=%s",
+                        game_id, channel["chat_id"],
+                        ch_updates[channel["msg_col"]], ch_updates[channel["photo_col"]],
+                    )
+                except Exception as e2:
+                    logger.warning(
+                        "MIGRATE failed game=%s channel=%s: %s",
+                        game_id, channel["chat_id"], e2,
+                    )
+                continue
+            logger.warning(
+                "UPDATE failed game=%s channel=%s msg_id=%s: %s",
+                game_id, channel["chat_id"], msg_id, e,
+            )
+
+    if updates:
+        data_utils.update_game(game_id, updates)
 
 
 # ---------------------------------------------------------------------------

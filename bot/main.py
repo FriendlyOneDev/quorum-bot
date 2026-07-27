@@ -114,8 +114,11 @@ async def on_startup(app):
     # One-time migration from old JSON format
     data_utils.migrate_from_events()
 
-    # Refresh all posted game announcements
-    await _refresh_all_posts(app.bot)
+    # Refresh all posted game announcements. Fired as a background task so we
+    # DO NOT block polling for the ~minutes this can take on a rate-limited
+    # channel — otherwise every command sent during startup is stuck at
+    # Telegram until the refresh finishes.
+    asyncio.create_task(_refresh_all_posts(app.bot))
 
     # Start periodic refresh task
     asyncio.create_task(_periodic_refresh(app.bot))
