@@ -7,3 +7,13 @@ services:
       - .env
     volumes:
       - ./data:/app/data
+
+  web:
+    image: friendlyone/quorum-bot:latest
+    container_name: quorum-web
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    command: ["gunicorn", "-w", "2", "-b", "0.0.0.0:8080", "web.app:create_app()"]

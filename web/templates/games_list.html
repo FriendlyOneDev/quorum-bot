@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Ігри · Quorum{% endblock %}
+
+{% macro game_row(g) -%}
+<li class="game-row status-{{ g._status }}">
+  <a href="{{ url_for('game_detail', game_id=g.game_id) }}">
+    <span class="game-date">{{ g.game_date | display_date }}</span>
+    <span class="game-title">{{ g.title }}</span>
+    <span class="game-fill">{{ g.players|length }}/{{ g.max_players }}</span>
+    {% if g._status == 'cancelled' %}<span class="badge badge-cancel">скасовано</span>{% endif %}
+    {% if g._status == 'full' %}<span class="badge badge-full">повна</span>{% endif %}
+  </a>
+</li>
+{%- endmacro %}
+
+{% block content %}
+<h1>Ігри</h1>
+
+<section>
+  <h2>Найближчі</h2>
+  {% if upcoming %}
+    <ul class="game-list">{% for g in upcoming %}{{ game_row(g) }}{% endfor %}</ul>
+  {% else %}
+    <p class="muted">Немає запланованих ігор.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Минулі</h2>
+  {% if past %}
+    <ul class="game-list past">{% for g in past %}{{ game_row(g) }}{% endfor %}</ul>
+  {% else %}
+    <p class="muted">Порожньо.</p>
+  {% endif %}
+</section>
+{% endblock %}

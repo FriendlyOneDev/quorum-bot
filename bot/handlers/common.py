@@ -147,6 +147,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append("/myslots — Перевірити свої слоти")
     lines.append("/whoami — Ваша роль та слоти")
     lines.append("/togglenotify — Увімкнути/вимкнути сповіщення про 24h")
+    lines.append("/login — Отримати посилання для входу на веб-сайт")
     lines.append("/help — Показати цю довідку")
     lines.append("/ping — Перевірка зв'язку")
 

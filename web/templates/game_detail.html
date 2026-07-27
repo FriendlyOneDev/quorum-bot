@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ game.title }} · Quorum{% endblock %}
+
+{% block content %}
+<article class="game-detail status-{{ status }}">
+  {% if status == 'cancelled' %}<p class="banner banner-cancelled">Гру скасовано</p>{% endif %}
+
+  <h1>{{ game.title }}</h1>
+
+  <div class="meta">
+    <div><b>ГМ:</b> {{ gm_name }}</div>
+    {% if game.game_date %}<div><b>Дата:</b> {{ game.game_date | display_date }}</div>{% endif %}
+    {% if game.location %}<div><b>Місце:</b> {{ game.location }}</div>{% endif %}
+    {% if game.tone %}<div><b>Тон:</b> {{ game.tone }}</div>{% endif %}
+    {% if game.duration %}<div><b>Протяжність:</b> {{ game.duration }}</div>{% endif %}
+    <div><b>Гравці:</b> {{ players|length }}/{{ game.max_players }}</div>
+  </div>
+
+  <section class="description">
+    <p>{{ game.description|replace('\n', '<br>')|safe }}</p>
+  </section>
+
+  <section>
+    <h2>Гравці ({{ players|length }}/{{ game.max_players }})</h2>
+    {% if players %}
+      <ul class="player-list">
+        {% for p in players %}<li>{{ p.name }}</li>{% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">Ніхто ще не записався.</p>
+    {% endif %}
+  </section>
+
+  {% if interested %}
+  <section>
+    <h2>Зацікавлені ({{ interested|length }})</h2>
+    <ul class="player-list muted">
+      {% for i in interested %}<li>{{ i.name }}</li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  <section class="actions">
+    {% if status == 'cancelled' or started %}
+      <p class="muted">
+        {% if status == 'cancelled' %}Гра скасована — записатись не можна.
+        {% else %}Гра вже розпочалась.{% endif %}
+      </p>
+    {% elif current_user %}
+      {% if is_joined %}
+        <form method="post" action="{{ url_for('game_leave', game_id=game.game_id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="btn-danger">Відписатись</button>
+        </form>
+      {% else %}
+        <form method="post" action="{{ url_for('game_join', game_id=game.game_id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="btn-primary"
+                  {% if players|length >= game.max_players %}disabled{% endif %}>
+            {% if players|length >= game.max_players %}Гра заповнена{% else %}Записатись{% endif %}
+          </button>
+        </form>
+        <form method="post" action="{{ url_for('game_interested', game_id=game.game_id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="btn-secondary">
+            {% if is_interested %}Прибрати «Зацікавлений»{% else %}Зацікавлений{% endif %}
+          </button>
+        </form>
+      {% endif %}
+    {% else %}
+      <a class="btn-primary" href="{{ url_for('login', next=request.path) }}">
+        Увійти, щоб записатись
+      </a>
+    {% endif %}
+  </section>
+
+  <p class="back-link"><a href="{{ url_for('games_list') }}">← До списку</a></p>
+</article>
+{% endblock %}

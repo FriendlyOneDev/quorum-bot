@@ -65,6 +65,8 @@ from bot.handlers import (
     setrole, setname, whoami, users_list, toggle_notify, toggle_bypass,
     # register
     register_start, register_callback,
+    # weblogin
+    login_cmd, start_cmd,
 )
 
 
@@ -314,7 +316,8 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("post", post_start))
     app.add_handler(CommandHandler("rollcall", rollcall_start))
     app.add_handler(CommandHandler("help", help_cmd))
-    app.add_handler(CommandHandler("start", help_cmd))
+    app.add_handler(CommandHandler("start", start_cmd))
+    app.add_handler(CommandHandler("login", login_cmd))
 
     # Slot commands
     app.add_handler(CommandHandler("giveslot", giveslot))

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Календар · Quorum{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<h1>Календар ігор</h1>
+<div id="calendar"></div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var el = document.getElementById('calendar');
+  var cal = new FullCalendar.Calendar(el, {
+    initialView: 'dayGridMonth',
+    timeZone: '{{ timezone }}',
+    locale: 'uk',
+    firstDay: 1,
+    height: 'auto',
+    headerToolbar: {
+      left: 'prev,next today',
+      center: 'title',
+      right: 'dayGridMonth,listWeek'
+    },
+    buttonText: {
+      today: 'сьогодні',
+      month: 'місяць',
+      list: 'тиждень',
+    },
+    events: '/api/events.json',
+    displayEventTime: true,
+    eventDidMount: function (info) {
+      if (info.event.classNames.includes('status-cancelled')) {
+        info.el.style.opacity = '0.55';
+        info.el.style.textDecoration = 'line-through';
+      }
+    },
+  });
+  cal.render();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Вхід · Quorum{% endblock %}
+
+{% block content %}
+<h1>Вхід через Telegram</h1>
+
+{% if deep_link %}
+  <ol class="login-steps">
+    <li>Натисніть кнопку нижче — відкриється чат із ботом.</li>
+    <li>У чаті натисніть <b>Start</b> (або надішліть <code>/login</code>).</li>
+    <li>Бот пришле вам разове посилання — натисніть його, щоб увійти.</li>
+  </ol>
+
+  <p>
+    <a class="btn-primary big" href="{{ deep_link }}" target="_blank" rel="noopener">
+      Отримати посилання для входу
+    </a>
+  </p>
+
+  <p class="muted">Посилання діє 10 хвилин.</p>
+{% else %}
+  <p class="flash flash-warning">
+    Змінна оточення <code>BOT_USERNAME</code> не задана. Адміну треба виставити її, щоб працював вхід.
+  </p>
+{% endif %}
+{% endblock %}

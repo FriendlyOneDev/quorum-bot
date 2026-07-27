@@ -379,13 +379,15 @@ def _title_link(game):
     return f"<b>{title}</b>"
 
 
-async def _notify_creator(context, game, user, action):
-    """Send a DM to the game creator about a join/leave action."""
+async def _notify_creator(bot, game, user, action):
+    """Send a DM to the game creator about a join/leave action.
+
+    `user` needs `.id`, `.username`, `.full_name` (a telegram.User or a shim)."""
     creator_id = game.get("creator_id")
     if not creator_id:
         return
 
-    user_mention = await _resolve_user_display(context.bot, user)
+    user_mention = await _resolve_user_display(bot, user)
     players = game.get("players", [])
     max_players = game["max_players"]
     title_link = _title_link(game)
@@ -396,7 +398,7 @@ async def _notify_creator(context, game, user, action):
     )
 
     try:
-        await context.bot.send_message(
+        await bot.send_message(
             chat_id=creator_id, text=text, parse_mode="HTML",
             disable_web_page_preview=True,
         )
@@ -404,13 +406,13 @@ async def _notify_creator(context, game, user, action):
         pass
 
 
-async def _notify_creator_interested(context, game, user):
+async def _notify_creator_interested(bot, game, user):
     """DM the GM that someone marked themselves interested in the game."""
     creator_id = game.get("creator_id")
     if not creator_id:
         return
 
-    user_mention = await _resolve_user_display(context.bot, user)
+    user_mention = await _resolve_user_display(bot, user)
     title_link = _title_link(game)
     interested_count = len(game.get("interested", []))
 
@@ -420,7 +422,7 @@ async def _notify_creator_interested(context, game, user):
     )
 
     try:
-        await context.bot.send_message(
+        await bot.send_message(
             chat_id=creator_id, text=text, parse_mode="HTML",
             disable_web_page_preview=True,
         )
@@ -542,7 +544,7 @@ async def _do_join(update, context, game, player_id):
     )
     await query.answer("Ви записались!")
     await update_posted_message(context.bot, game, game_id)
-    await _notify_creator(context, game, update.effective_user, "записався на")
+    await _notify_creator(context.bot, game, update.effective_user, "записався на")
 
 
 async def _do_leave(update, context, game, player_id):
@@ -566,7 +568,7 @@ async def _do_leave(update, context, game, player_id):
     )
     await query.answer("Ви відписались.")
     await update_posted_message(context.bot, game, game_id)
-    await _notify_creator(context, game, update.effective_user, "відписався від")
+    await _notify_creator(context.bot, game, update.effective_user, "відписався від")
 
 
 # Back-compat: old posted messages still carry join:/leave: callbacks.
@@ -614,7 +616,7 @@ async def interested_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game = data_utils.get_game(game_id)
     await update_posted_message(context.bot, game, game_id)
     if notify_gm:
-        await _notify_creator_interested(context, game, update.effective_user)
+        await _notify_creator_interested(context.bot, game, update.effective_user)
 
 
 # ---------------------------------------------------------------------------

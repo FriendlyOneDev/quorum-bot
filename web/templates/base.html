@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Quorum{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="{{ url_for('calendar_view') }}">Terra Incognita</a>
+  <nav>
+    <a href="{{ url_for('calendar_view') }}">Календар</a>
+    <a href="{{ url_for('games_list') }}">Список</a>
+  </nav>
+  <div class="auth">
+    {% if current_user %}
+      <span class="user-name">
+        {{ current_user.custom_name or current_user.display_name or current_user.username or current_user.user_id }}
+      </span>
+      <form method="post" action="{{ url_for('logout') }}" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="link-btn">Вийти</button>
+      </form>
+    {% else %}
+      <a class="btn-primary" href="{{ url_for('login') }}">Увійти</a>
+    {% endif %}
+  </div>
+</header>
+
+<main>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <ul class="flashes">
+        {% for cat, msg in messages %}<li class="flash flash-{{ cat }}">{{ msg }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="site-footer">
+  Terra Incognita · quorum-bot
+</footer>
+</body>
+</html>
