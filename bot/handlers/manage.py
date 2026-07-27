@@ -133,7 +133,12 @@ async def edit_value(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Сесія редагування скинулась. Почніть знову з /edit.")
         return ConversationHandler.END
     text = update.message.text
-    value = text
+    # Preserve Telegram formatting (bold/italic/etc.) on free-text fields.
+    # Numeric/date fields still use plain text since HTML tags would break parsing.
+    if field in ("title", "description", "location", "tone", "duration"):
+        value = update.message.text_html or text
+    else:
+        value = text
 
     if field == "max_players":
         try:
