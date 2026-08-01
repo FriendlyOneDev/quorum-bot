@@ -16,15 +16,15 @@ logger = logging.getLogger(__name__)
 from bot.handlers.post import notify_cancellation
 from bot.keyboards import (
     game_list_keyboard, edit_field_keyboard, confirm_delete_keyboard, player_list_keyboard,
-    confirm_cancel_keyboard,
+    confirm_cancel_keyboard, confirm_kick_all_keyboard,
 )
 
 # Conversation states
 EDIT_SELECT, EDIT_FIELD, EDIT_VALUE = range(6, 9)
 DELETE_SELECT, DELETE_CONFIRM = range(9, 11)
-KICK_SELECT_GAME, KICK_SELECT_PLAYER = range(11, 13)
-CANCEL_SELECT, CANCEL_CONFIRM = range(13, 15)
-UNCANCEL_SELECT = 15
+KICK_SELECT_GAME, KICK_SELECT_PLAYER, KICK_CONFIRM_ALL = range(11, 14)
+CANCEL_SELECT, CANCEL_CONFIRM = range(14, 16)
+UNCANCEL_SELECT = 16
 
 
 def _get_manageable_games(user_id):
@@ -428,6 +428,115 @@ async def kick_select_player(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     await query.edit_message_text(
         f"Гравця {name} знято з гри <b>{game['title']}</b>.",
+        parse_mode="HTML",
+    )
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+@ensure_user
+async def kick_all_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show the confirm dialog when GM taps '🧹 Зняти всіх гравців' in /kick."""
+    query = update.callback_query
+    await query.answer()
+
+    game_id = context.user_data.get("kick_game_id")
+    if not game_id:
+        context.user_data.clear()
+        await query.edit_message_text("Сесія скинулась. Почніть знову з /kick.")
+        return ConversationHandler.END
+
+    game = data_utils.get_game(game_id)
+    if not game:
+        await query.edit_message_text("Гру не знайдено.")
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    count = len(game.get("players", []))
+    if count == 0:
+        await query.edit_message_text("На цю гру ніхто не записаний.")
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    await query.edit_message_text(
+        f"Зняти всіх <b>{count}</b> гравців з <b>{game['title']}</b>?\n\n"
+        f"Слоти буде повернено, гравці отримають сповіщення.",
+        parse_mode="HTML",
+        reply_markup=confirm_kick_all_keyboard(),
+    )
+    return KICK_CONFIRM_ALL
+
+
+@ensure_user
+async def kick_all_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Execute the bulk kick (or dismiss on 'Ні')."""
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "kick_all_no":
+        context.user_data.clear()
+        await query.edit_message_text("Скасовано.")
+        return ConversationHandler.END
+
+    game_id = context.user_data.get("kick_game_id")
+    if not game_id:
+        context.user_data.clear()
+        await query.edit_message_text("Сесія скинулась. Почніть знову з /kick.")
+        return ConversationHandler.END
+
+    game = data_utils.get_game(game_id)
+    if not game:
+        await query.edit_message_text("Гру не знайдено.")
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    # Snapshot the roster + who consumed a slot BEFORE mutating.
+    players_info = data_utils.get_players_with_slots(game_id)
+    player_ids = [p["user_id"] for p in players_info]
+
+    # Remove each and refund used slots.
+    refunded = 0
+    for p in players_info:
+        data_utils.remove_player(game_id, p["user_id"])
+        if p["used_slot"]:
+            data_utils.add_slots(p["user_id"], 1)
+            refunded += 1
+
+    # Re-fetch, refresh channel post so player list shows 0/N.
+    game = data_utils.get_game(game_id)
+    if game.get("message_id"):
+        try:
+            await update_posted_message(context.bot, game, game_id)
+        except Exception as e:
+            logger.warning("KICK_ALL refresh failed game=%s: %s", game_id, e)
+
+    # DM every kicked player.
+    msg_id = game.get("message_id")
+    title_link = (
+        build_announcement_link_html(msg_id, game["title"])
+        if msg_id else f"<b>{game['title']}</b>"
+    )
+    notified = 0
+    for pid in player_ids:
+        try:
+            await context.bot.send_message(
+                chat_id=pid,
+                text=f"Ви були зняті з гри {title_link}.",
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+            notified += 1
+        except Exception:
+            pass
+
+    logger.info(
+        "KICK_ALL game=%s by=%s kicked=%d refunded=%d notified=%d",
+        game_id, update.effective_user.id, len(player_ids), refunded, notified,
+    )
+
+    await query.edit_message_text(
+        f"З гри <b>{game['title']}</b> знято {len(player_ids)} гравців. "
+        f"Повернуто {refunded} слотів, надіслано {notified} сповіщень.",
         parse_mode="HTML",
     )
     context.user_data.clear()

@@ -44,7 +44,8 @@ from bot.handlers import (
     DELETE_SELECT, DELETE_CONFIRM,
     # /kick
     kick_start, kick_select_game, kick_select_player,
-    KICK_SELECT_GAME, KICK_SELECT_PLAYER,
+    kick_all_prompt, kick_all_confirm,
+    KICK_SELECT_GAME, KICK_SELECT_PLAYER, KICK_CONFIRM_ALL,
     # /cancel + /uncancel
     cancel_start, cancel_select, cancel_confirm,
     CANCEL_SELECT, CANCEL_CONFIRM,
@@ -268,7 +269,13 @@ if __name__ == "__main__":
         entry_points=[CommandHandler("kick", kick_start)],
         states={
             KICK_SELECT_GAME: [CallbackQueryHandler(kick_select_game, pattern=r"^kick_game:")],
-            KICK_SELECT_PLAYER: [CallbackQueryHandler(kick_select_player, pattern=r"^kick_player:")],
+            KICK_SELECT_PLAYER: [
+                CallbackQueryHandler(kick_select_player, pattern=r"^kick_player:"),
+                CallbackQueryHandler(kick_all_prompt, pattern=r"^kick_all$"),
+            ],
+            KICK_CONFIRM_ALL: [
+                CallbackQueryHandler(kick_all_confirm, pattern=r"^kick_all_(yes|no)$"),
+            ],
         },
         fallbacks=[
             CommandHandler("cancel", cancel),

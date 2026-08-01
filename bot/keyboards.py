@@ -75,13 +75,24 @@ def time_picker_keyboard(prefix="time"):
 
 
 def player_list_keyboard(player_ids, player_names):
-    """One button per player. callback_data = kick_player:{user_id}"""
+    """One button per player + a 'kick all' row. Handles both kick_player:{id} and kick_all."""
     buttons = [
         [InlineKeyboardButton(player_names.get(pid, str(pid)), callback_data=f"kick_player:{pid}")]
         for pid in player_ids
     ]
+    buttons.append([InlineKeyboardButton("🧹 Зняти всіх гравців", callback_data="kick_all")])
     buttons.append([InlineKeyboardButton("Скасувати", callback_data="cancel")])
     return InlineKeyboardMarkup(buttons)
+
+
+def confirm_kick_all_keyboard():
+    """Yes/No confirmation for bulk kick."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("Так, зняти всіх", callback_data="kick_all_yes"),
+            InlineKeyboardButton("Ні", callback_data="kick_all_no"),
+        ]
+    ])
 
 
 def confirm_delete_keyboard(game_id):
