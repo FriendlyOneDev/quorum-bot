@@ -27,6 +27,8 @@ from bot.handlers.post import (
     join_game, leave_game, signup_toggle, interested_toggle,
     maybe_fire_24h_notifications,
     rollcall_start, rollcall_select,
+    pubch_toggle, pubch_repost_prompt, pubch_repost_yes, pubch_repost_no,
+    pubch_repost_cancel, pubch_cancel, pubch_go,
 )
 
 from bot.handlers.slots import giveslot, giveslots, myslots

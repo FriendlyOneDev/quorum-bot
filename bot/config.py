@@ -19,6 +19,8 @@ def _parse_chat(raw):
 
 CHANNELS = [
     {
+        "key": "main",
+        "name": "Main Terra Incognita",
         "chat_id": _parse_chat(ANNOUNCEMENTS_CHAT),
         "topic_id": ANNOUNCEMENTS_TOPIC,
         "msg_col": "message_id",
@@ -29,6 +31,8 @@ CHANNELS = [
 _academy_chat = os.getenv("ANNOUNCEMENTS_CHAT_ACADEMY")
 if _academy_chat:
     CHANNELS.append({
+        "key": "academy",
+        "name": "Academy Terra Incognita",
         "chat_id": _parse_chat(_academy_chat),
         "topic_id": int(os.getenv("ANNOUNCEMENTS_TOPIC_ACADEMY", "0")) or None,
         "msg_col": "message_id_academy",
@@ -36,3 +40,11 @@ if _academy_chat:
     })
 
 MAIN_CHANNEL = CHANNELS[0]
+
+
+def get_channel(key):
+    """Look up a channel entry by its short key ('main', 'academy')."""
+    for ch in CHANNELS:
+        if ch["key"] == key:
+            return ch
+    return None

@@ -55,6 +55,9 @@ from bot.handlers import (
     publish_now_callback, publish_skip_callback,
     join_game, leave_game, signup_toggle, interested_toggle,
     maybe_fire_24h_notifications,
+    # channel picker
+    pubch_toggle, pubch_repost_prompt, pubch_repost_yes, pubch_repost_no,
+    pubch_repost_cancel, pubch_cancel, pubch_go,
     # browse
     available_games, my_games,
     # /rollcall
@@ -345,6 +348,15 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(join_game, pattern=r"^join:"))
     app.add_handler(CallbackQueryHandler(leave_game, pattern=r"^leave:"))
     app.add_handler(CallbackQueryHandler(register_callback, pattern=r"^register_me$"))
+    # Channel picker (order matters — go/cancel come before the parameterised ones
+    # so their exact patterns match first).
+    app.add_handler(CallbackQueryHandler(pubch_go, pattern=r"^pubch:go$"))
+    app.add_handler(CallbackQueryHandler(pubch_cancel, pattern=r"^pubch:cancel$"))
+    app.add_handler(CallbackQueryHandler(pubch_toggle, pattern=r"^pubch:toggle:"))
+    app.add_handler(CallbackQueryHandler(pubch_repost_prompt, pattern=r"^pubch:repost:"))
+    app.add_handler(CallbackQueryHandler(pubch_repost_yes, pattern=r"^pubch:rp_yes:"))
+    app.add_handler(CallbackQueryHandler(pubch_repost_no, pattern=r"^pubch:rp_no:"))
+    app.add_handler(CallbackQueryHandler(pubch_repost_cancel, pattern=r"^pubch:rp_cancel:"))
     app.add_handler(CallbackQueryHandler(cancel, pattern=r"^cancel$"))
 
     app.run_polling(allowed_updates=["message", "callback_query"])

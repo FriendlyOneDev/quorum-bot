@@ -102,3 +102,43 @@ def confirm_cancel_keyboard(game_id):
             InlineKeyboardButton("Ні, не скасовувати", callback_data="cancel_no"),
         ]
     ])
+
+
+def channel_picker_keyboard(channels, selected, repost):
+    """Picker used at publish time. `channels` is the list from bot.config.CHANNELS.
+    `selected[key]` is True/False for unposted channels (checkbox state).
+    `repost[key]` is True for already-posted channels marked for delete+repost.
+
+    Each channel button shows its current state; tapping toggles/prompts."""
+    rows = []
+    for ch in channels:
+        if not ch.get("chat_id"):
+            continue
+        key = ch["key"]
+        if repost.get(key):
+            label = f"🔄 {ch['name']} (перепублікувати)"
+            data = f"pubch:rp_cancel:{key}"
+        elif key in selected:
+            check = "✅" if selected[key] else "☐"
+            label = f"{check} {ch['name']}"
+            data = f"pubch:toggle:{key}"
+        else:
+            # already posted, not marked for repost
+            label = f"📌 {ch['name']} (вже опубліковано)"
+            data = f"pubch:repost:{key}"
+        rows.append([InlineKeyboardButton(label, callback_data=data)])
+    rows.append([
+        InlineKeyboardButton("Публікувати", callback_data="pubch:go"),
+        InlineKeyboardButton("Скасувати", callback_data="pubch:cancel"),
+    ])
+    return InlineKeyboardMarkup(rows)
+
+
+def confirm_repost_keyboard(channel_key):
+    """Confirm dialog before marking an already-posted channel for delete+repost."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("Так, перепублікувати", callback_data=f"pubch:rp_yes:{channel_key}"),
+            InlineKeyboardButton("Ні", callback_data=f"pubch:rp_no:{channel_key}"),
+        ]
+    ])

@@ -10,7 +10,12 @@ import data_utils
 from bot.config import CHANNELS, MAIN_CHANNEL
 from bot.handlers.common import format_game, resolve_player_names, build_announcement_link_html
 from bot.handlers.decorators import ensure_user, require_private, require_gm
-from bot.keyboards import game_list_keyboard, join_leave_keyboard
+from bot.keyboards import (
+    game_list_keyboard,
+    join_leave_keyboard,
+    channel_picker_keyboard,
+    confirm_repost_keyboard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +82,168 @@ async def post_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Гру не знайдено.")
         return
 
-    updates = await _post_game_to_announcements(context.bot, game)
+    await _show_channel_picker(query, context, game)
+
+
+# ---------------------------------------------------------------------------
+# Channel picker (shown before publish, both from /create's "Так" and /post)
+# ---------------------------------------------------------------------------
+
+def _init_picker_state(game):
+    """Compute initial state: unposted channels default checked, posted ones shown separately."""
+    selected = {}
+    for ch in CHANNELS:
+        if not ch.get("chat_id"):
+            continue
+        if not game.get(ch["msg_col"]):
+            selected[ch["key"]] = True   # unposted → default checked
+        # posted channels are absent from `selected` and start with repost=False
+    return {
+        "game_id": game["game_id"],
+        "selected": selected,     # {channel_key: bool} for unposted channels
+        "repost": {},             # {channel_key: True} for posted channels marked to re-post
+        "pending_confirm": None,  # channel_key mid-confirm dialog
+    }
+
+
+async def _show_channel_picker(query, context, game):
+    """Render the picker in place of the current message."""
+    state = _init_picker_state(game)
+    context.user_data["pubch"] = state
+    await query.edit_message_text(
+        f"<b>{game['title']}</b>\n\nКуди публікувати?",
+        parse_mode="HTML",
+        reply_markup=channel_picker_keyboard(CHANNELS, state["selected"], state["repost"]),
+    )
+
+
+def _picker_state(context):
+    return context.user_data.get("pubch")
+
+
+async def _redraw_picker(query, context):
+    state = _picker_state(context)
+    game = data_utils.get_game(state["game_id"])
+    await query.edit_message_text(
+        f"<b>{game['title']}</b>\n\nКуди публікувати?",
+        parse_mode="HTML",
+        reply_markup=channel_picker_keyboard(CHANNELS, state["selected"], state["repost"]),
+    )
+
+
+@ensure_user
+async def pubch_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Toggle checkbox for an unposted channel."""
+    query = update.callback_query
+    state = _picker_state(context)
+    if not state:
+        await query.answer("Сесія публікації скинулась. Почніть знову з /post.", show_alert=True)
+        return
+    key = query.data.split(":", 2)[2]
+    if key in state["selected"]:
+        state["selected"][key] = not state["selected"][key]
+    await query.answer()
+    await _redraw_picker(query, context)
+
+
+@ensure_user
+async def pubch_repost_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """User tapped an already-posted channel — show delete+repost confirm."""
+    query = update.callback_query
+    state = _picker_state(context)
+    if not state:
+        await query.answer("Сесія публікації скинулась. Почніть знову з /post.", show_alert=True)
+        return
+    key = query.data.split(":", 2)[2]
+    channel = next((c for c in CHANNELS if c["key"] == key), None)
+    if not channel:
+        await query.answer("Невідомий канал.", show_alert=True)
+        return
+    state["pending_confirm"] = key
+    await query.answer()
+    await query.edit_message_text(
+        f"Перепублікувати гру в <b>{channel['name']}</b>?\n\n"
+        f"Це видалить існуюче оголошення та опублікує нове.",
+        parse_mode="HTML",
+        reply_markup=confirm_repost_keyboard(key),
+    )
+
+
+@ensure_user
+async def pubch_repost_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    state = _picker_state(context)
+    if not state:
+        await query.answer("Сесія публікації скинулась. Почніть знову з /post.", show_alert=True)
+        return
+    key = query.data.split(":", 2)[2]
+    state["repost"][key] = True
+    state["pending_confirm"] = None
+    await query.answer("Позначено для перепублікації.")
+    await _redraw_picker(query, context)
+
+
+@ensure_user
+async def pubch_repost_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    state = _picker_state(context)
+    if not state:
+        await query.answer("Сесія публікації скинулась. Почніть знову з /post.", show_alert=True)
+        return
+    state["pending_confirm"] = None
+    await query.answer()
+    await _redraw_picker(query, context)
+
+
+@ensure_user
+async def pubch_repost_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Tapped a channel that's already marked for repost — unmark it."""
+    query = update.callback_query
+    state = _picker_state(context)
+    if not state:
+        await query.answer("Сесія публікації скинулась. Почніть знову з /post.", show_alert=True)
+        return
+    key = query.data.split(":", 2)[2]
+    state["repost"].pop(key, None)
+    await query.answer()
+    await _redraw_picker(query, context)
+
+
+@ensure_user
+async def pubch_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    context.user_data.pop("pubch", None)
+    await query.answer()
+    await query.edit_message_text("Скасовано. Можете опублікувати пізніше через /post.")
+
+
+@ensure_user
+async def pubch_go(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Commit: publish to selected channels + re-post to repost-marked ones."""
+    query = update.callback_query
+    state = _picker_state(context)
+    if not state:
+        await query.answer("Сесія публікації скинулась. Почніть знову з /post.", show_alert=True)
+        return
+
+    chosen_keys = {k for k, v in state["selected"].items() if v} | set(state["repost"])
+    if not chosen_keys:
+        await query.answer("Оберіть хоча б один канал.", show_alert=True)
+        return
+
+    game_id = state["game_id"]
+    context.user_data.pop("pubch", None)
+    game = data_utils.get_game(game_id)
+    if not game:
+        await query.answer()
+        await query.edit_message_text("Гру не знайдено.")
+        return
+
+    channels = [c for c in CHANNELS if c["key"] in chosen_keys]
+    await query.answer("Публікую...")
+    updates = await _post_game_to_announcements(
+        context.bot, game, channels=channels, repost_keys=set(state["repost"]),
+    )
     if updates:
         data_utils.update_game(game_id, updates)
         await query.edit_message_text("Гру опубліковано!")
@@ -133,29 +299,49 @@ async def _send_to_channel(bot, game, text, keyboard, channel):
     return sent, None
 
 
-async def _post_game_to_announcements(bot, game):
-    """Post a game to every configured channel (mirror).
+async def _delete_channel_post(bot, game, channel):
+    """Best-effort delete of a game's existing message(s) in one channel."""
+    chat_id = channel["chat_id"]
+    for col in (channel["msg_col"], channel["photo_col"]):
+        msg_id = game.get(col)
+        if not msg_id:
+            continue
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=msg_id)
+        except Exception as e:
+            logger.warning(
+                "DELETE-old failed channel=%s msg=%s: %s", chat_id, msg_id, e,
+            )
+
+
+async def _post_game_to_announcements(bot, game, channels=None, repost_keys=None):
+    """Post a game to the given `channels` (subset of CHANNELS; default: all).
+    For each key in `repost_keys`, delete the existing post in that channel first.
 
     Returns a dict of column-name → id updates suitable for update_game(),
-    or None if EVERY channel failed. Partial success is still returned.
+    or None if EVERY targeted channel failed. Partial success is still returned.
     """
-    if not CHANNELS or not CHANNELS[0]["chat_id"]:
+    targets = channels if channels is not None else CHANNELS
+    targets = [c for c in targets if c.get("chat_id")]
+    if not targets:
         return None
+    repost_keys = repost_keys or set()
 
     player_names = await resolve_player_names(bot, MAIN_CHANNEL["chat_id"], game.get("players", []))
     text = format_game(game, player_names)
     keyboard = _keyboard_for(game, game["game_id"])
     logger.info(
-        "POST game=%s players=%d/%d started=%s",
+        "POST game=%s players=%d/%d started=%s channels=%s repost=%s",
         game["game_id"], len(game.get("players", [])),
         game["max_players"], _is_game_started(game),
+        [c["key"] for c in targets], sorted(repost_keys),
     )
 
     updates = {}
     any_success = False
-    for channel in CHANNELS:
-        if not channel["chat_id"]:
-            continue
+    for channel in targets:
+        if channel["key"] in repost_keys:
+            await _delete_channel_post(bot, game, channel)
         for attempt in range(2):
             try:
                 text_msg, photo_msg = await _send_to_channel(bot, game, text, keyboard, channel)
@@ -215,14 +401,7 @@ async def publish_now_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text("Гру не знайдено.")
         return
 
-    updates = await _post_game_to_announcements(context.bot, game)
-    if updates:
-        data_utils.update_game(game_id, updates)
-        await query.edit_message_text("Гру опубліковано!")
-    else:
-        await query.edit_message_text(
-            "Не вдалося опублікувати. Спробуйте пізніше через /post."
-        )
+    await _show_channel_picker(query, context, game)
 
 
 @ensure_user
