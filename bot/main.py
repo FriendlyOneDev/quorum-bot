@@ -65,6 +65,8 @@ from bot.handlers import (
     setrole, setname, whoami, users_list, toggle_notify, toggle_bypass,
     # register
     register_start, register_callback,
+    # weekly
+    pause_weekly_cmd, resume_weekly_cmd,
 )
 
 
@@ -78,6 +80,7 @@ logger = logging.getLogger(__name__)
 
 async def _refresh_all_posts(bot):
     from bot.handlers.post import update_posted_message
+    from bot.weekly import refresh_all_weeklies
     # Snapshot only game_ids; re-fetch each game just before rendering so
     # concurrent /cancel, /edit, join/leave etc. that landed after the snapshot
     # are honored instead of overwritten with stale state.
@@ -97,6 +100,11 @@ async def _refresh_all_posts(bot):
             await maybe_fire_24h_notifications(bot, game)
         except Exception as e:
             logger.warning("24H_NOTIFY failed game=%s: %s", game_id, e)
+    # After per-game refresh finishes, publish/update the weekly pin for each channel.
+    try:
+        await refresh_all_weeklies(bot)
+    except Exception as e:
+        logger.warning("WEEKLY refresh cycle failed: %s", e)
     logger.info("REFRESH cycle complete: %d games refreshed", refreshed)
 
 
@@ -119,6 +127,11 @@ async def on_startup(app):
     # channel — otherwise every command sent during startup is stuck at
     # Telegram until the refresh finishes.
     asyncio.create_task(_refresh_all_posts(app.bot))
+
+    # Fire the weekly pin generator concurrently so the pin appears within
+    # seconds of startup instead of waiting for the per-game refresh to finish.
+    from bot.weekly import refresh_all_weeklies
+    asyncio.create_task(refresh_all_weeklies(app.bot))
 
     # Start periodic refresh task
     asyncio.create_task(_periodic_refresh(app.bot))
@@ -331,6 +344,10 @@ if __name__ == "__main__":
 
     # Register command
     app.add_handler(CommandHandler("register", register_start))
+
+    # Weekly-pin controls (admin only)
+    app.add_handler(CommandHandler("pause_weekly", pause_weekly_cmd))
+    app.add_handler(CommandHandler("resume_weekly", resume_weekly_cmd))
 
     # Standalone callback handlers
     app.add_handler(CallbackQueryHandler(post_select, pattern=r"^post:"))

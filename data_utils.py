@@ -656,3 +656,90 @@ def migrate_from_events():
                     "INSERT INTO game_media (game_id, file_path) VALUES (%s, %s)",
                     (game_id, fp),
                 )
+
+
+# ---------------------------------------------------------------------------
+# Weekly posts + bot_state
+# ---------------------------------------------------------------------------
+
+def get_weekly_post(channel_key: str, iso_week: str) -> Optional[Dict]:
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT channel_key, iso_week, chat_id, message_id, content_hash "
+            "FROM weekly_posts WHERE channel_key = %s AND iso_week = %s",
+            (channel_key, iso_week),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "channel_key": row[0], "iso_week": row[1], "chat_id": row[2],
+            "message_id": row[3], "content_hash": row[4],
+        }
+
+
+def upsert_weekly_post(channel_key: str, iso_week: str, chat_id,
+                       message_id: int, content_hash: str) -> None:
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """INSERT INTO weekly_posts (channel_key, iso_week, chat_id, message_id, content_hash)
+               VALUES (%s, %s, %s, %s, %s)
+               ON CONFLICT (channel_key, iso_week) DO UPDATE
+                 SET chat_id = EXCLUDED.chat_id,
+                     message_id = EXCLUDED.message_id,
+                     content_hash = EXCLUDED.content_hash,
+                     updated_at = NOW()""",
+            (channel_key, iso_week, chat_id, message_id, content_hash),
+        )
+
+
+def get_last_weekly_post_for_channel(channel_key: str,
+                                     before_iso_week: str) -> Optional[Dict]:
+    """Most recent weekly_posts row for `channel_key` strictly before `before_iso_week`.
+    Used to unpin the previous week's message when the new one goes up."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT channel_key, iso_week, chat_id, message_id "
+            "FROM weekly_posts WHERE channel_key = %s AND iso_week < %s "
+            "ORDER BY iso_week DESC LIMIT 1",
+            (channel_key, before_iso_week),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "channel_key": row[0], "iso_week": row[1],
+            "chat_id": row[2], "message_id": row[3],
+        }
+
+
+def get_weekly_paused() -> bool:
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT weekly_paused FROM bot_state WHERE id = 1")
+        row = cur.fetchone()
+        return bool(row[0]) if row else False
+
+
+def set_weekly_paused(paused: bool) -> None:
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """INSERT INTO bot_state (id, weekly_paused) VALUES (1, %s)
+               ON CONFLICT (id) DO UPDATE SET weekly_paused = EXCLUDED.weekly_paused""",
+            (paused,),
+        )
+
+
+def clear_channel_msg_ids(game_id: str, msg_col: str, photo_col: str) -> None:
+    """Null out both message-id columns for a game in one channel.
+    Called when the refresh loop discovers the message no longer exists."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"UPDATE games SET {msg_col} = NULL, {photo_col} = NULL WHERE game_id = %s",
+            (game_id,),
+        )

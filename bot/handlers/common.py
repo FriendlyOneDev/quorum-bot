@@ -171,5 +171,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append("/setrole — Змінити роль користувача")
         lines.append("/users — Список користувачів")
         lines.append("/togglebypass — Увімкнути/вимкнути обхід слотів для себе")
+        lines.append("/pause_weekly — Призупинити тижневий закріплений розклад")
+        lines.append("/resume_weekly — Відновити тижневий закріплений розклад")
 
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")

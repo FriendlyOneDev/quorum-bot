@@ -326,6 +326,18 @@ async def update_posted_message(bot, game, game_id):
                         game_id, channel["chat_id"], e2,
                     )
                 continue
+            # GM manually deleted the post from this channel — Telegram returns
+            # "Message to edit not found". Clear the stale IDs so downstream
+            # (weekly generator, channel picker) sees the game as unposted here.
+            if "not found" in err:
+                data_utils.clear_channel_msg_ids(
+                    game_id, channel["msg_col"], channel["photo_col"],
+                )
+                logger.info(
+                    "CLEAR-stale game=%s channel=%s msg=%s (message not found)",
+                    game_id, channel["chat_id"], msg_id,
+                )
+                continue
             logger.warning(
                 "UPDATE failed game=%s channel=%s msg_id=%s: %s",
                 game_id, channel["chat_id"], msg_id, e,
@@ -333,6 +345,16 @@ async def update_posted_message(bot, game, game_id):
 
     if updates:
         data_utils.update_game(game_id, updates)
+
+    # Any action that syncs a channel post also touches the weekly pin, so
+    # /edit, /join, /leave, /cancel, /uncancel, /kick, etc. reflect immediately
+    # instead of waiting up to REFRESH_INTERVAL_MINUTES. No-op when content
+    # unchanged (hash compare in maybe_publish_or_update_weekly).
+    from bot.weekly import refresh_all_weeklies
+    try:
+        await refresh_all_weeklies(bot)
+    except Exception as e:
+        logger.warning("WEEKLY sync after update_posted_message failed: %s", e)
 
 
 # ---------------------------------------------------------------------------

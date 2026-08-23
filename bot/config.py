@@ -19,6 +19,8 @@ def _parse_chat(raw):
 
 CHANNELS = [
     {
+        "key": "main",
+        "name": "Terra Incognita",
         "chat_id": _parse_chat(ANNOUNCEMENTS_CHAT),
         "topic_id": ANNOUNCEMENTS_TOPIC,
         "msg_col": "message_id",
@@ -29,6 +31,8 @@ CHANNELS = [
 _academy_chat = os.getenv("ANNOUNCEMENTS_CHAT_ACADEMY")
 if _academy_chat:
     CHANNELS.append({
+        "key": "academy",
+        "name": "Academy Terra Incognita",
         "chat_id": _parse_chat(_academy_chat),
         "topic_id": int(os.getenv("ANNOUNCEMENTS_TOPIC_ACADEMY", "0")) or None,
         "msg_col": "message_id_academy",

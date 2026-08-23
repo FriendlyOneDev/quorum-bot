@@ -32,3 +32,4 @@ from bot.handlers.post import (
 from bot.handlers.slots import giveslot, giveslots, myslots
 from bot.handlers.roles import setrole, setname, whoami, users_list, toggle_notify, toggle_bypass
 from bot.handlers.register import register_start, register_callback
+from bot.handlers.weekly import pause_weekly_cmd, resume_weekly_cmd
