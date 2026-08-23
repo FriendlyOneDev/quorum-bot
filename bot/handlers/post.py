@@ -712,7 +712,7 @@ async def rollcall_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.delete()
     await context.bot.send_message(
         chat_id=target_chat.id,
-        text=f"Перекличка для <b>{game['title']}</b>:\n\n{mentions}",
+        text=f"Перекличка для {_title_link(game)}:\n\n{mentions}",
         parse_mode="HTML",
         message_thread_id=thread_id,
     )
