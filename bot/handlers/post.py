@@ -578,7 +578,7 @@ async def _do_leave(update, context, game, player_id):
 
     data_utils.remove_player(game_id, player_id)
     if player_used_slot:
-        data_utils.add_slots(player_id, 1)
+        data_utils.add_slots(player_id, 1, refund=True)
 
     game = data_utils.get_game(game_id)
     logger.info(

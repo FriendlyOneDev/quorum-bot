@@ -232,7 +232,7 @@ async def delete_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         refunded = 0
         for p in players_info:
             if p["used_slot"]:
-                data_utils.add_slots(p["user_id"], 1)
+                data_utils.add_slots(p["user_id"], 1, refund=True)
                 refunded += 1
 
         data_utils.delete_game(game_id)
@@ -390,7 +390,7 @@ async def kick_select_player(update: Update, context: ContextTypes.DEFAULT_TYPE)
     used_slot = any(p["user_id"] == player_id and p["used_slot"] for p in players_info)
     data_utils.remove_player(game_id, player_id)
     if used_slot:
-        data_utils.add_slots(player_id, 1)
+        data_utils.add_slots(player_id, 1, refund=True)
 
     game = data_utils.get_game(game_id)
     logger.info(
@@ -503,7 +503,7 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     refunded = 0
     for p in players_info:
         if p["used_slot"]:
-            data_utils.add_slots(p["user_id"], 1)
+            data_utils.add_slots(p["user_id"], 1, refund=True)
             refunded += 1
 
     # Re-fetch with cancelled=True for the post update.

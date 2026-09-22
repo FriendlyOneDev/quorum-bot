@@ -416,13 +416,20 @@ def get_slots(user_id: int) -> int:
     return user.get("slots", 0)
 
 
-def add_slots(user_id: int, count: int = 1) -> bool:
+def add_slots(user_id: int, count: int = 1, refund: bool = False) -> bool:
+    """Grant slots, or hand one back with refund=True.
+
+    The two cases only differ across a week boundary: last week's balance is
+    gone, so a refund of a slot spent then has nothing to return to and is
+    dropped, while a fresh grant still stacks on the new week's allowance.
+    Same call signature otherwise, hence the flag.
+    """
     user = get_user(user_id)
     if not user:
         return False
     current_week = _current_week()
     if user.get("slots_week") != current_week:
-        new_slots = max(0, WEEKLY_SLOT_ALLOWANCE + count)
+        new_slots = WEEKLY_SLOT_ALLOWANCE if refund else max(0, WEEKLY_SLOT_ALLOWANCE + count)
         update_user(user_id, {"slots": new_slots, "slots_week": current_week})
     else:
         new_slots = max(0, user.get("slots", 0) + count)
