@@ -4,7 +4,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 
 import data_utils
-from bot.handlers.common import format_game
+from bot.handlers.common import format_game, clear_flow
 from bot.handlers.decorators import ensure_user, require_private, require_gm
 from bot.keyboards import date_picker_keyboard, time_picker_keyboard
 
@@ -18,7 +18,7 @@ CREATE_TITLE, CREATE_DESC, CREATE_MAX, CREATE_LOCATION, CREATE_DATE, CREATE_TIME
 @require_private
 @require_gm
 async def create_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
+    clear_flow(context, "create_")
     await update.message.reply_text("Введіть назву гри:")
     return CREATE_TITLE
 
@@ -147,7 +147,7 @@ async def _finish_create(reply_target, context):
         "CREATE game=%s by user=%s title=%r max_players=%d",
         game["game_id"], context._user_id, game["title"], game["max_players"],
     )
-    context.user_data.clear()
+    clear_flow(context, "create_")
 
     keyboard = InlineKeyboardMarkup([
         [

@@ -111,6 +111,14 @@ async def resolve_player_names(bot, chat_id, player_ids):
     return names
 
 
+def clear_flow(context, prefix):
+    """Drop only one conversation's keys. user_data is shared by every
+    conversation, so a blanket clear() in one flow wipes another still-live
+    one (e.g. /edit mid-/create -> KeyError: 'create_title')."""
+    for key in [k for k in context.user_data if k.startswith(prefix)]:
+        del context.user_data[key]
+
+
 @ensure_user
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
@@ -125,7 +133,6 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.callback_query.message.delete()
     else:
         await update.message.reply_text("Скасовано.")
-    context.user_data.clear()
     return ConversationHandler.END
 
 

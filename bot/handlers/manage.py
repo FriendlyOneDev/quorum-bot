@@ -7,7 +7,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 import data_utils
 from bot.config import MAIN_CHANNEL
 from bot.handlers.common import (
-    format_game, build_announcement_link_html, _DAY_NAMES_UK, resolve_player_names,
+    format_game, build_announcement_link_html, _DAY_NAMES_UK, resolve_player_names, clear_flow,
 )
 from bot.handlers.decorators import ensure_user, require_private, require_gm
 from bot.handlers.post import update_posted_message, delete_posted_message
@@ -69,7 +69,7 @@ async def view_games(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @require_private
 @require_gm
 async def edit_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
+    clear_flow(context, "edit_")
     games = _get_manageable_games(update.effective_user.id)
     if not games:
         await update.message.reply_text("У вас немає ігор для редагування.")
@@ -129,7 +129,7 @@ async def edit_value(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game_id = context.user_data.get("edit_game_id")
     if not field or not game_id:
         # State was wiped (e.g. another conversation cleared user_data).
-        context.user_data.clear()
+        clear_flow(context, "edit_")
         await update.message.reply_text("Сесія редагування скинулась. Почніть знову з /edit.")
         return ConversationHandler.END
     text = update.message.text
@@ -158,7 +158,7 @@ async def edit_value(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data_utils.update_game(game_id, {field: value})
     logger.info("EDIT game=%s field=%s by user=%s", game_id, field, update.effective_user.id)
-    context.user_data.clear()
+    clear_flow(context, "edit_")
 
     game = data_utils.get_game(game_id)
     await update.message.reply_text(
@@ -180,7 +180,6 @@ async def edit_value(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @require_private
 @require_gm
 async def delete_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
     games = _get_manageable_games(update.effective_user.id)
     if not games:
         await update.message.reply_text("У вас немає ігор для видалення.")
@@ -330,7 +329,7 @@ async def my_games(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @require_private
 @require_gm
 async def kick_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
+    clear_flow(context, "kick_")
     games = _get_manageable_games(update.effective_user.id)
     if not games:
         await update.message.reply_text("У вас немає ігор.")
@@ -375,7 +374,7 @@ async def kick_select_player(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     game_id = context.user_data.get("kick_game_id")
     if not game_id:
-        context.user_data.clear()
+        clear_flow(context, "kick_")
         await query.edit_message_text("Сесія скинулась. Почніть знову з /kick.")
         return ConversationHandler.END
 
@@ -383,7 +382,7 @@ async def kick_select_player(update: Update, context: ContextTypes.DEFAULT_TYPE)
     game = data_utils.get_game(game_id)
     if not game or player_id not in game.get("players", []):
         await query.edit_message_text("Гравця вже немає в цій грі.")
-        context.user_data.clear()
+        clear_flow(context, "kick_")
         return ConversationHandler.END
 
     # Refund slot if it was used.
@@ -430,7 +429,7 @@ async def kick_select_player(update: Update, context: ContextTypes.DEFAULT_TYPE)
         f"Гравця {name} знято з гри <b>{game['title']}</b>.",
         parse_mode="HTML",
     )
-    context.user_data.clear()
+    clear_flow(context, "kick_")
     return ConversationHandler.END
 
 
@@ -442,7 +441,6 @@ async def kick_select_player(update: Update, context: ContextTypes.DEFAULT_TYPE)
 @require_private
 @require_gm
 async def cancel_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
     games = _get_cancellable_games(update.effective_user.id)
     if not games:
         await update.message.reply_text("У вас немає активних ігор для скасування.")
@@ -545,7 +543,6 @@ async def cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @require_private
 @require_gm
 async def uncancel_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
     games = _get_cancelled_games(update.effective_user.id)
     if not games:
         await update.message.reply_text("У вас немає скасованих ігор.")
