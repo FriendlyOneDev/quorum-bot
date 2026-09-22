@@ -112,7 +112,13 @@ async def _periodic_refresh(bot):
     interval = REFRESH_INTERVAL_MINUTES * 60
     while True:
         await asyncio.sleep(interval)
-        await _refresh_all_posts(bot)
+        try:
+            await _refresh_all_posts(bot)
+        except Exception as e:
+            # A DB blip must NOT kill the loop. _refresh_all_posts() calls
+            # get_all_games() outside any guard, so one OperationalError used to
+            # end the task outright — no refreshes, no weekly pin, until restart.
+            logger.warning("REFRESH cycle failed, retrying next tick: %s", e)
 
 
 async def on_startup(app):
@@ -158,12 +164,16 @@ async def error_handler(update, context):
     import time
     err = context.error
 
-    # Filter out transient network/DNS errors but track frequency
+    # Filter out transient connectivity errors but track frequency. Includes
+    # psycopg2.OperationalError: when the DB host drops, EVERY update raises,
+    # and without this the admin gets one full traceback per interaction.
     import httpx
+    import psycopg2
     from telegram.error import NetworkError, TimedOut
     if isinstance(err, (httpx.ConnectError, httpx.ReadError, httpx.RemoteProtocolError,
-                        httpx.PoolTimeout, NetworkError, TimedOut)):
-        logger.warning("Transient network error: %s", err)
+                        httpx.PoolTimeout, NetworkError, TimedOut,
+                        psycopg2.OperationalError)):
+        logger.warning("Transient connectivity error: %s", err)
 
         global _last_network_alert
         now = time.time()
@@ -180,7 +190,7 @@ async def error_handler(update, context):
             try:
                 await context.bot.send_message(
                     chat_id=admin_id,
-                    text=f"⚠️ {count} network errors in last {NETWORK_ERROR_WINDOW // 60} min. Last: {err}",
+                    text=f"⚠️ {count} connectivity errors in last {NETWORK_ERROR_WINDOW // 60} min. Last: {err}",
                 )
             except Exception:
                 pass

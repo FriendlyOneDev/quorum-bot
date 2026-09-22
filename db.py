@@ -23,22 +23,28 @@ def _get_pool():
     return _pool
 
 
+def _is_alive(conn) -> bool:
+    """Cheap liveness probe. Covers conn.closed too — executing on a closed
+    connection raises InterfaceError."""
+    try:
+        conn.cursor().execute("SELECT 1")
+        conn.rollback()
+        return True
+    except Exception:
+        return False
+
+
 @contextmanager
 def get_conn():
     p = _get_pool()
     conn = p.getconn()
+    # Recycle a dead connection BEFORE entering the try — otherwise the finally
+    # below would putconn() a connection we already handed back, and psycopg2
+    # raises PoolError("trying to put unkeyed connection") over the real error.
+    if not _is_alive(conn):
+        p.putconn(conn, close=True)
+        conn = p.getconn()
     try:
-        # Test if connection is alive
-        if conn.closed:
-            p.putconn(conn, close=True)
-            conn = p.getconn()
-        else:
-            try:
-                conn.cursor().execute("SELECT 1")
-                conn.rollback()
-            except Exception:
-                p.putconn(conn, close=True)
-                conn = p.getconn()
         yield conn
         conn.commit()
     except Exception:
