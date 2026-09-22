@@ -1,8 +1,12 @@
+import logging
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
 import data_utils
 from bot.handlers.decorators import ensure_user, require_gm
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +73,10 @@ async def giveslot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data_utils.add_slots(target_user["user_id"], count)
     new_total = data_utils.get_slots(target_user["user_id"])
+    logger.info(
+        "GIVESLOT target=%s count=%d new_total=%d by user=%s",
+        target_user["user_id"], count, new_total, update.effective_user.id,
+    )
     name = target_user.get("display_name") or target_user.get("username") or str(target_user["user_id"])
 
     word = _slot_word(count)
@@ -78,7 +86,7 @@ async def giveslot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ---------------------------------------------------------------------------
-# /giveslots — GM gives 1 slot to all known regular users
+# /giveslots — GM gives N slots to every known user (all roles)
 # ---------------------------------------------------------------------------
 
 @ensure_user
@@ -95,12 +103,17 @@ async def giveslots(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Кількість має бути ненульовим числом.")
             return
 
+    # Every role, not just role='user'. GMs and admins need slots too — slot
+    # bypass is off by default, so skipping them left them unable to sign up.
     users = data_utils.get_all_users()
     count = 0
     for user in users:
-        if user["role"] == "user":
-            data_utils.add_slots(user["user_id"], amount)
-            count += 1
+        data_utils.add_slots(user["user_id"], amount)
+        count += 1
+    logger.info(
+        "GIVESLOTS amount=%d recipients=%d by user=%s",
+        amount, count, update.effective_user.id,
+    )
 
     word = _slot_word(amount)
     await update.message.reply_text(
