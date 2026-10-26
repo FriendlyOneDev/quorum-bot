@@ -203,7 +203,11 @@ async def maybe_publish_or_update_weekly(bot, channel: Dict) -> None:
 
         # Best-effort unpin previous week's message so only one weekly is pinned.
         prev = data_utils.get_last_weekly_post_for_channel(channel["key"], iso_week)
-        if prev and prev["chat_id"] == channel["chat_id"]:
+        # Compare as strings: weekly_posts.chat_id is TEXT (migration 014, to hold
+        # @usernames), so a numeric channel comes back as "-100..." while CHANNELS
+        # holds an int. == was always False for those, and the academy channel went
+        # months accumulating one pinned weekly per week.
+        if prev and str(prev["chat_id"]) == str(channel["chat_id"]):
             try:
                 await bot.unpin_chat_message(
                     chat_id=channel["chat_id"], message_id=prev["message_id"],
