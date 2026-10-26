@@ -1,3 +1,5 @@
+import random
+import time
 from datetime import datetime
 
 from telegram import Update
@@ -89,10 +91,30 @@ def format_game(game, player_names=None):
     return "\n".join(lines)
 
 
+# get_chat_member carries the channel chat_id, so AIORateLimiter throttles it
+# with the group bucket: 20/60s, i.e. 3 seconds per call. Resolving 138 players
+# each refresh cycle cost ~7 minutes and blocked every user action behind it.
+# Character tags change rarely, so cache them.
+NAME_CACHE_TTL = 86400  # tags are character names; a day stale is fine
+_name_cache: dict = {}
+
+
+def _name_cache_expiry(now):
+    """Jittered so entries don't all lapse on the same refresh cycle and
+    re-create the stall this cache exists to prevent."""
+    return now + NAME_CACHE_TTL * (0.5 + random.random())
+
+
 async def resolve_player_names(bot, chat_id, player_ids):
-    """Resolve player display names: tag → display_name from DB."""
+    """Resolve player display names: tag → display_name from DB. Cached for
+    NAME_CACHE_TTL seconds, keyed by (chat_id, user_id)."""
     names = {}
+    now = time.monotonic()
     for pid in player_ids:
+        cached = _name_cache.get((chat_id, pid))
+        if cached and now < cached[0]:
+            names[pid] = cached[1]
+            continue
         name = None
         # Try to get tag (regular members) or custom_title (admins)
         try:
@@ -107,6 +129,7 @@ async def resolve_player_names(bot, chat_id, player_ids):
                 name = user.get("display_name") or user.get("username") or str(pid)
             else:
                 name = str(pid)
+        _name_cache[(chat_id, pid)] = (_name_cache_expiry(now), name)
         names[pid] = name
     return names
 

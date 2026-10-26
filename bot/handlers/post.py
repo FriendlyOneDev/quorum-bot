@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 from datetime import datetime
 
@@ -26,6 +27,11 @@ def _is_game_started(game):
         return datetime.now(data_utils.TIMEZONE) >= dt
     except ValueError:
         return False
+
+
+# game_id -> signature of the last render we successfully pushed to every
+# channel. In-memory: a restart just means one full refresh cycle.
+_last_rendered: dict = {}
 
 
 def _keyboard_for(game, game_id):
@@ -276,6 +282,17 @@ async def update_posted_message(bot, game, game_id):
     )
     text = format_game(game, player_names)
     keyboard = _keyboard_for(game, game_id)
+
+    # Telegram rejects an unchanged edit with "not modified", but the call still
+    # costs a group rate-limit slot (3s each). Most of the 40+ posted games never
+    # change between cycles, so skip the API round-trip when the render matches
+    # what we last successfully pushed.
+    signature = hashlib.sha256(
+        f"{text}|{keyboard is not None}".encode("utf-8")
+    ).hexdigest()
+    if _last_rendered.get(game_id) == signature:
+        return
+
     logger.info(
         "UPDATE game=%s players=%d/%d started=%s",
         game_id, len(game.get("players", [])),
@@ -284,6 +301,7 @@ async def update_posted_message(bot, game, game_id):
 
     has_media = bool(game.get("photo_id"))
     updates = {}
+    all_ok = True
 
     for channel in CHANNELS:
         msg_id = game.get(channel["msg_col"])
@@ -321,6 +339,7 @@ async def update_posted_message(bot, game, game_id):
                         ch_updates[channel["msg_col"]], ch_updates[channel["photo_col"]],
                     )
                 except Exception as e2:
+                    all_ok = False
                     logger.warning(
                         "MIGRATE failed game=%s channel=%s: %s",
                         game_id, channel["chat_id"], e2,
@@ -338,10 +357,14 @@ async def update_posted_message(bot, game, game_id):
                     game_id, channel["chat_id"], msg_id,
                 )
                 continue
+            all_ok = False
             logger.warning(
                 "UPDATE failed game=%s channel=%s msg_id=%s: %s",
                 game_id, channel["chat_id"], msg_id, e,
             )
+
+    if all_ok:
+        _last_rendered[game_id] = signature
 
     if updates:
         data_utils.update_game(game_id, updates)
