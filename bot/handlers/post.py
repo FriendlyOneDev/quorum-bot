@@ -381,21 +381,37 @@ async def update_posted_message(bot, game, game_id):
 
 
 # ---------------------------------------------------------------------------
-# Delete posted message (used on game delete)
+# Retire a posted message on game delete (post stays, buttons go)
 # ---------------------------------------------------------------------------
 
-async def delete_posted_message(bot, game):
-    """Delete the posted game message(s) from every configured announcements channel."""
+async def strip_posted_keyboard(bot, game):
+    """Leave the announcement standing but take its buttons off.
+
+    /delete used to remove the channel post outright. GMs use the channel as
+    the game's record, so the post stays; only the signup buttons go, since the
+    game row is about to disappear and pressing them could then only ever
+    answer "Ця гра більше не існує". The keyboard lives on the text message,
+    so the photo message (split posts) needs nothing.
+    """
     for channel in CHANNELS:
         if not channel["chat_id"]:
             continue
-        for msg_id in (game.get(channel["msg_col"]), game.get(channel["photo_col"])):
-            if not msg_id:
-                continue
-            try:
-                await bot.delete_message(chat_id=channel["chat_id"], message_id=msg_id)
-            except Exception:
-                pass
+        msg_id = game.get(channel["msg_col"])
+        if not msg_id:
+            continue
+        try:
+            await bot.edit_message_reply_markup(
+                chat_id=channel["chat_id"], message_id=msg_id, reply_markup=None,
+            )
+        except Exception as e:
+            # "not modified" just means it had no keyboard already (a started or
+            # cancelled game). Anything else is logged rather than swallowed —
+            # the old bare except made a failed cleanup invisible.
+            if "not modified" not in str(e).lower():
+                logger.warning(
+                    "STRIP-KEYBOARD failed game=%s channel=%s msg=%s: %s",
+                    game.get("game_id"), channel["chat_id"], msg_id, e,
+                )
 
 
 # ---------------------------------------------------------------------------

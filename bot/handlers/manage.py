@@ -10,7 +10,7 @@ from bot.handlers.common import (
     format_game, build_announcement_link_html, _DAY_NAMES_UK, resolve_player_names, clear_flow,
 )
 from bot.handlers.decorators import ensure_user, require_private, require_gm
-from bot.handlers.post import update_posted_message, delete_posted_message
+from bot.handlers.post import update_posted_message, strip_posted_keyboard
 
 logger = logging.getLogger(__name__)
 from bot.handlers.post import notify_cancellation
@@ -224,8 +224,9 @@ async def delete_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game = data_utils.get_game(game_id)
 
     if game:
-        # Delete posted message from announcements
-        await delete_posted_message(context.bot, game)
+        # The channel announcement stays — GMs keep it as the game's record.
+        # Only the signup buttons come off.
+        await strip_posted_keyboard(context.bot, game)
 
         # Refund slots to players who used one
         players_info = data_utils.get_players_with_slots(game_id)
@@ -241,7 +242,7 @@ async def delete_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
             game_id, update.effective_user.id, refunded,
         )
 
-        msg = "Гру видалено."
+        msg = "Гру видалено. Оголошення залишиться в каналі."
         if refunded > 0:
             msg += f" Повернуто слоти {refunded} гравцям."
         await query.edit_message_text(msg)
