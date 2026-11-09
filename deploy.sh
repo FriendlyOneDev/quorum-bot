@@ -1,31 +1,26 @@
 #!/bin/bash
 set -e
 
-ENV_FILE="${1:-.env}"
-SERVER="192.168.3.15"
-APP_DIR="/home/friendlyone/quorum-bot"
+# Contabo VPS. The old home-lab target (192.168.3.15) was retired in Oct 2026
+# when the bots moved here; .15/.16 may come back but are no longer production.
+SERVER="root@13.140.132.119"
+APP_DIR="/root/apps/quorum-bot"
 IMAGE="friendlyone/quorum-bot:latest"
-
-if [ ! -f "$ENV_FILE" ]; then
-    echo "Error: $ENV_FILE not found"
-    exit 1
-fi
-
-echo "==> Using env: $ENV_FILE"
 
 echo "==> Building image locally..."
 docker build -t "$IMAGE" .
 
 echo "==> Transferring image to $SERVER..."
-docker save "$IMAGE" | ssh "$SERVER" "docker load"
+docker save "$IMAGE" | gzip | ssh "$SERVER" "gunzip | docker load"
 
-echo "==> Syncing compose + env files..."
-ssh "$SERVER" "mkdir -p $APP_DIR"
+echo "==> Syncing compose..."
+# .env and db.env stay server-side only: they hold the prod secrets and point
+# DATABASE_URL at the in-compose db host. A dev checkout must never clobber them.
 rsync -az docker-compose.yml "$SERVER:$APP_DIR/"
-rsync -az "$ENV_FILE" "$SERVER:$APP_DIR/.env"
 
-echo "==> Restarting container on $SERVER..."
-ssh "$SERVER" "cd $APP_DIR && docker compose up -d --force-recreate"
+echo "==> Restarting bot on $SERVER..."
+# --no-deps leaves Postgres alone; its data lives in $APP_DIR/pgdata on the host.
+ssh "$SERVER" "cd $APP_DIR && docker compose up -d --force-recreate --no-deps bot"
 
 echo "==> Done."
-ssh "$SERVER" "docker ps --filter name=quorum-bot --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'"
+ssh "$SERVER" "docker ps --filter name=quorum --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'"

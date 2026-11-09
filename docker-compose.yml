@@ -7,3 +7,13 @@ services:
       - .env
     volumes:
       - ./data:/app/data
+    depends_on:
+      - db
+  db:
+    image: postgres:17
+    container_name: quorum-db
+    restart: unless-stopped
+    env_file:
+      - db.env
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
